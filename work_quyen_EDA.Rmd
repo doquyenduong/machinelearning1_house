@@ -1,0 +1,384 @@
+---
+title: "Ames Housing Project"
+author: "Quyen Duong, Amin Jamali, Camille Nigon, Pascal Waser"
+date: "Last edited `r format(Sys.time(), '%d %B %Y')`"
+output: 
+  html_document:
+    toc: true
+    toc_float: 
+      collapsed: false 
+      smooth_scroll: false
+    toc_depth: 3
+    number_section: true 
+---
+
+```{r setup, include=FALSE}
+# Set the default mode for all the chunks
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
+```
+
+```{r load-packages, include = FALSE}
+# Load packages
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(scales)                      # formating numbers on axis ggplot
+library(gridExtra)
+library(tidyr)
+library(readr)
+library(knitr)
+library(lubridate)                   # to format date
+library(egg)                         # plot layout 
+library(PerformanceAnalytics)        # correlation matrix
+library(GGally)                      # correlation matrix
+library(corrplot)                    # correlation matrix
+library(Hmisc)                       # correlation matrix
+library(psych)                       # summary statistics
+library(caret)                       # split data train-test
+library(broom)                       # visualize fitted linear with categorical variable
+library(MASS)
+library(conflicted)                  # set conflict
+
+
+# Set conflict preference
+conflict_prefer("filter", "dplyr")
+conflict_prefer("select", "dplyr")
+
+# Deactivate scientific notation
+# options(scipen = 999)
+```
+
+```{r set-up-theme-for-ggplot, include = FALSE}
+my_theme_general <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+        text = element_text(size = 10, color = "#495057"),
+        panel.grid.major = element_line(linetype = "dashed"),
+        panel.grid.minor = element_blank()
+    ) 
+
+my_theme_bar_chart <- theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+        plot.subtitle = element_text(hjust = 0.5),
+        text = element_text(size = 10, color = "#495057"),
+        panel.grid.minor = element_blank(),
+        panel.grid.major.x = element_line(linetype = "dashed"),
+        panel.grid.major.y = element_blank()
+    )
+
+my_theme_heat_map <-  theme_minimal() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    text = element_text(size = 10, color = "#495057"),
+    axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)
+    )
+
+my_blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank(),
+  plot.title=element_text(size=14, face="bold")
+  )
+```
+
+# Motivation and purpose
+
+The study attempts to predict the house price in Ames, Iowa. To predict the house price, several machine learning methods will be used such as linear model (LM), Generalised Linear Model (GLM), Generalised Additive Model (GAM), Neural Network (NN), Support Vector Machine (SVM) and Approximate Bayesian Computation. Yet, before predicting price and applying models, it's vital to explore and understand the data. 
+
+# Data comprehension
+
+```{r load-data, include = FALSE}
+# Load data
+d_house <- read.csv("dataset/AmesHousing.csv") %>% 
+  as_tibble()
+
+# Check the variables
+glimpse(d_house)
+
+# Write a new Excel with all variable name and check if they are important to the house price
+# names(d_house) %>% 
+#   as_tibble() %>% 
+#   writexl::write_xlsx("variables_intuition_analysis.xlsx")
+
+# Exclude the irrelevant variables
+d_house <- d_house %>% 
+  select(-c(Order, PID))
+```
+
+There are 82 variables and 2930 observations in the data set. As there are many variables, we first have to examine and make a intuition analysis on every variable and its relevance to the main variable ´SalePrice´. Although this process can be very time-consuming, it shed the light to grasp the data better. How did we do that? Below are the step explanation:
+
+* Reading and understanding every variable description
+* Make a new Excel with two columns: variable name and importance to sale price (Yes/No). The decision of Yes/No is grounded on intuition, expectation and some house-price related articles. To be more specific, we question these following questions: which factor matters when we buy a house? How important would this factor be? Does this factor appear in other variables?
+
+The intuition-based Excel file can be found in the ´variables_intuition_analysis.xlsx´. At the first glimpse, we marked these might-be-relevant features to the SalePrice: MS.Zoning, Lot.Area, Street, Lot.Shape, Neighborhood, Bldg.Type, House.Style, Overall.Qual, Year.Built, Foundation, Total.Bsmt.SF, TotRms.AbvGrd, Mo.Sold, Yr.Sold, Garage.Cars, Sale.Condition.
+
+After thinking of potential features, let's inspect the response variable in the next part. 
+
+# The response variable - Sale price 
+
+The scope of this analysis is to predict the housing sales price based on appropriate features. First, we plot the histogram and box plot of the sale price (i.e. the dependent variable).
+
+```{r histogram-sales-price}
+# Histogram
+histogram_sale_price <- ggplot(d_house, mapping = aes(x = SalePrice)) +
+  geom_histogram(aes(y=..density..), color="black", fill = "grey") +
+  geom_density(alpha=.2, color ="blue") +
+  scale_x_continuous(labels = comma) +
+  labs(title = "Histogram of sale price") +
+  my_theme_general
+
+# Boxplot
+boxplot_sale_price <- ggplot(d_house, mapping = aes(x = "", y = SalePrice)) +
+  geom_boxplot(color = "black", fill = "grey") +
+  scale_y_continuous(labels = comma) +
+  coord_flip() +
+   xlab("") +
+  my_theme_general
+
+# Display two plots together
+egg::ggarrange(histogram_sale_price, boxplot_sale_price, heights = 2:1)
+
+# Descriptive statistics summary of SalePrice
+psych::describe(d_house$SalePrice)
+```
+
+The distribution of sale prices displays right-skewed with a long tail. The skew of 1.74 confirms that the data are highly confirmed. Besides, the Kurtosis is 5.1, i.e. Leptokurtic with a longer distribution and fatter tails. Some houses are very expensive. We have to carefully consider whether these expensive houses are outliers. Instead of dropping outliers, we apply the log transformation for sale prices. 
+
+```{r log-sales-price}
+# Add a column of Log Sale Price
+d_house <- d_house %>% 
+  mutate(Log.SalePrice = log(SalePrice))
+```
+
+From the beginning to this point, we just follow the intuition for variable selection. However, this method can be subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.    
+
+# Numerical variable analysis
+
+## Correlation matrix 
+
+```{r corr-matrix}
+# Overview correlation matrix of all numerical variables
+d_house_numeric <- d_house %>% 
+  select(where(is.numeric)) %>% 
+  select(-Log.SalePrice)
+
+# Missing value check in numerical features -> not so many NA
+round(colMeans(is.na(d_house_numeric)), 2) %>%  
+  as.data.frame()
+
+# Overview histograms of all numerical variables
+# hist.data.frame(d_house_numeric)
+
+# Create correlation matrix, use = complete to obmit NA, because not so many NA
+m_cor <- cor(d_house_numeric, use = "complete") 
+
+# Correlogram
+corrplot(m_cor, method = "color", addCoef.col="black",
+         order = "alphabet", number.cex=0.35, tl.cex = 0.55)
+```
+
+The correlation matrix shows some dark blue areas where variables are highly correlated to each other. To be more specific, `Garage.Area` is highly correlated `Garage.Cars` or other pairs such  `Gr.Liv.Area` with `TotRms.AbvGrd`; `Garage.Yr.Blt` with `Year.Built`. These pairs indicate the strong correlation and multi-collinearity. When we check these variables' meaning, they give almost similar information. Here, the correlation matrix is a crucial method to detect the multi-collinear problems in the feature selection process.
+
+```{r corr-SalePrice}
+# Calculate correlation matrix for all numerical features against SalePrice
+m_cor_SalePrice <- round(
+  cor(d_house_numeric, d_house["SalePrice"], use = "complete", ) ,2)
+
+# Transform into tibble and sort correlation in a descending order
+d_cor_SalePrice <- tibble(var_name = row.names(m_cor_SalePrice), 
+       SalePrice = m_cor_SalePrice[, "SalePrice"]) %>% 
+  arrange(desc(SalePrice))
+d_cor_SalePrice 
+```
+
+Remarkably, `Lot.Area`, the lot size in square feet is one of the variable we considered as important at the first sight but here, its correlation to the `SalePrice` is only 0.31. Let's look at the scatter plot of these two variables:
+
+```{r scatter-SalePrice-Lot.Area}
+# Scatter plot SalePrice & Lot.Area
+scatter_price_lot <- ggplot(d_house, aes(x = Lot.Area, y = SalePrice)) + 
+  geom_point() 
+  # xlim(0, 50000) +
+  # ylim(0, 500000)
+
+# Scatter plot SalePrice & Lot.Area but change the x & y range
+scatter_price_lot2 <- ggplot(d_house, aes(x = Lot.Area, y = SalePrice)) + 
+  geom_point() +
+  xlim(0, 50000) +
+  ylim(0, 500000)
+
+# Plot the two side-by-side
+egg::ggarrange(scatter_price_lot, scatter_price_lot2, ncol=2, nrow = 1)
+```
+
+Both variables have long tails to the right and many outliers. 
+
+The top 10 numerical features with the absolute highest correlation with the `SalePrice` are now selected and we produce a SalePrice correlation matrix as below:  
+
+```{r top10-numerical-correlation}
+# Make df of top 10 numerical variables with the absolute highest correlation to SalePrice
+d_cor_top_10 <- d_cor_SalePrice %>%  
+  mutate(abs_corr = abs(SalePrice)) %>% 
+  arrange(desc(abs_corr)) %>% 
+  slice(1:10)
+
+# Make vector with variable name
+v_top_10_cor <- d_cor_top_10 %>% 
+  # Select the variable names and convert to vector 
+  pull(var_name)
+
+# Correlation matrix of top 10
+m_cor_top_10 <- cor(d_house_numeric %>% 
+               select(all_of(v_top_10_cor)), 
+             use = "complete") 
+
+# Correlogram
+corrplot(m_cor_top_10, method = "color", addCoef.col="black", type = 'lower',
+         order = "alphabet", number.cex=0.55, tl.cex = 0.55)
+
+#Quick look on the scatter plot in pair for the top 10
+ggpairs(d_house_numeric %>% select(all_of(v_top_10_cor)))
+```
+
+From the new correlation matrix, some important findings are found:
+
+* `Garage.Area` and `Garage.Cars` are correlated highly with the dependent variable but they have the same information. Here, we keep the `Garage.Cars` as its higher correlation.  
+* `SalePrice` is strongly correlated to `Gr.Liv.Area`, `Overall.Qual`, `Total.Bsmt.SF` 
+* `Full.Bath` seems to be strange here
+* `BsmtFin.SF.1` and `Total.Bsmt.SF` display the related infomation, we choose `Total.Bsmt.SF` in this case
+* `TotRms.AbvGrd` and `Gr.Liv.Area` are similar. Here, we choose `Gr.Liv.Area`
+* `Year.Built`: 0.55 - moderately correlated to `SalePrice` 
+
+# Missing value
+
+It's important to inspect the missing values in each variable. How is the ratio of missing value in each feature? What do the missing value mean in each case? Are missing values random? These questions are vital when we deal with the missing value. Removing them immediately without reflecting can cause data size reduction and bias.
+
+```{r missing-values}
+# Number of NA values in each column
+d_number_missing_values <- colSums(is.na(d_house)) %>%  
+  as.data.frame() 
+colnames(d_number_missing_values) <- c("number")
+
+# Percentage of NA values in each column
+d_perc_missing_values <- round(colMeans(is.na(d_house)), 2) %>%  
+  as.data.frame()
+colnames(d_perc_missing_values) <- c("ratio")
+d_perc_missing_values
+
+# A summary table of missing values in each column
+d_summary_missing_value <- cbind(d_number_missing_values, d_perc_missing_values)
+
+# Change the summary missing values to tibble
+d_summary_missing_value <- tibble(var_name = row.names(d_summary_missing_value), 
+       n_missing = d_summary_missing_value[, "number"],
+       perc_missing = d_summary_missing_value[, "ratio"]) %>% 
+  arrange(desc(perc_missing)) 
+d_summary_missing_value
+
+# Exclude the columns with 49% missing value
+d_house <- d_house %>% 
+  select(-c(Alley, Fireplace.Qu, Pool.QC, Fence, Misc.Feature))
+
+# Change NA value for all the basement variables "Bsmt"
+# v_basement_catgorical <- c("Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "BsmtFin.Type.2")
+# 
+# d_house %>%  
+#   mutate(Bsmt.Qual = ifelse(is.na(Bsmt.Qual), "Not there", Bsmt.Qual))
+# 
+# d_house[v_basement_catgorical][is.na(d_house[v_basement_catgorical])] <- "No"
+# 
+# d_house$Bsmt.Qual
+```
+
+After examine the missing ratio, here are some decisions:
+
+* Excluding all the columns with more than 49% of missing values, namely `Pool.QC`, `Misc.Feature`, `Alley`, `Fence` and `Fireplace.Qu`.Filling NA value is not applied because these variables are not so important and not the main factors to think about when we buy a house.
+* Group of variables with "Garage": 5% are missing in these columns. Since we chose only `Garage.Cars` for the model in the previous part, we do not care about the rest.
+* Group of variables with "Bsmt": similar principle as the group of "Garage"
+
+# Categorical variables
+
+In this section, we will check the effects of different categorical features that are potentially relevant for the model. Before applying function drop1(), we will visualize SalePrice with several categorical variables
+
+## Visualizations of categorical variables
+
+### MS.Zoning
+
+```{r ms.zoning}
+boxplot(SalePrice ~ MS.Zoning, data = d_house)
+```
+
+`SalePrice` seems to differ among different `MSZoning`. Here, `MSZoning` identifies the general zoning classification of the sales such as agriculture, commercial, industrial.
+
+### Lot Shape
+Draw here
+
+### Neighborhood
+Draw here
+
+### Bldg.Type
+Draw here
+
+### House.Style
+Draw here
+
+### Sale conditions
+Draw here
+
+## Testing the effect of categorical variables
+
+After several visualizations, let's fit the model with all highly potential categorical variables and then apply drop1() function to test their significance.
+
+```{r drop1-categorical}
+d_house_seclected_categorical <- d_house %>% 
+  select(MS.Zoning, Neighborhood, Street, House.Style, Sale.Condition)
+
+lm.house.cate.1 <- lm(SalePrice ~ MS.Zoning + Neighborhood + Street + House.Style + Sale.Condition, data = d_house)
+
+drop1(lm.house.cate.1, test = "F")
+```
+
+From the p-value obtained, `Street` does not seem to have a relevant effect on the response variable
+
+# Testing the effects all potential features together
+
+```{r}
+# Testing all potential features together
+lm.house.test <- lm(SalePrice ~ MS.Zoning + Lot.Area + Street + Neighborhood + Bldg.Type + House.Style + Overall.Qual + Year.Built + Foundation + Total.Bsmt.SF + TotRms.AbvGrd + Garage.Cars + Sale.Condition, data = d_house)
+drop1(lm.house.test, test = "F")
+```
+
+## Variable selection
+
+```{r}
+# # Check which variables are factor
+# (l_factor <- sapply(d_house, function(x) is.factor(x)))
+# 
+# # Get the data frame of factor variables only
+# d_factor <- d_house[ , l_factor]
+# 
+# # Drop the factor variable with only 1 level
+# ifelse(n <- sapply(d_factor, function(x) length(levels(x))) == 1, "DROP", "NODROP")
+# 
+# # Checking d_house factor
+# str(d_house)
+# 
+# # Fit the full model
+# lm_full <- lm(SalePrice ~ ., data = d_house)
+# # lm_full <- lm(SalePrice ~ ., data = d_house)
+
+```
+
+# Stepwise selection
+
+```{r just-try-maybe delete}
+# library(leaps)
+# reg <- regsubsets(SalePrice ~ ., data = d_house, na.action=na.exclude, 
+#                   method = "forward", nvmax = 11)
+# reg.sum <- summary(reg)
+# reg.sum$which
+```
+
