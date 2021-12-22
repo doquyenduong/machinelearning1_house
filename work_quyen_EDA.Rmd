@@ -522,4 +522,10 @@ glimpse(d)
 # reg.sum <- summary(reg)
 # reg.sum$which
 ```
+ 
+ 
+```{r}
+d_house
+```
 
+haha hahahahah
