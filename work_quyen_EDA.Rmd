@@ -90,6 +90,7 @@ library(MASS)
 library(conflicted)                  # set conflict
 library(ggthemes)
 library(grid)
+library(leaps)                       # stepwise selection
 
 # Set conflict preference
 conflict_prefer("filter", "dplyr")
@@ -144,7 +145,7 @@ The study attempts to predict the house price in Ames, Iowa. To predict the hous
 
 ```{r load-data, include = FALSE}
 # Load data
-d_house <- read.csv("dataset/AmesHousing.csv") %>% 
+d_house <- read.csv("dataset/AmesHousing.csv", stringsAsFactors = TRUE) %>% 
   as_tibble()
 
 # Check the variables
@@ -199,12 +200,6 @@ stats_SalePrice <- psych::describe(d_house$SalePrice)
 
 The distribution of sale prices displays right-skewed with a long tail. The skew of `r stats_SalePrice$skew` confirms that the data are highly confirmed. Besides, the Kurtosis is `r stats_SalePrice$kurtosis`, i.e. Leptokurtic with a longer distribution and fatter tails. Some houses are very expensive. We have to carefully consider whether these expensive houses are outliers. Instead of dropping outliers, we apply the log transformation for sale prices. 
 
-```{r log-sales-price}
-# Add a column of Log Sale Price
-d_house <- d_house %>% 
-  mutate(Log.SalePrice = log(SalePrice))
-```
-
 From the beginning to this point, we just follow the intuition for variable selection. However, this method can be too subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.    
 
 # Numerical variable analysis
@@ -214,8 +209,7 @@ From the beginning to this point, we just follow the intuition for variable sele
 ```{r corr-matrix}
 # Overview correlation matrix of all numerical variables
 d_house_numeric <- d_house %>% 
-  select(where(is.numeric)) %>% 
-  select(-Log.SalePrice)
+  select(where(is.numeric))
 
 # Missing value check in numerical features -> not so many NA
 round(colMeans(is.na(d_house_numeric)), 2) %>%  
@@ -327,15 +321,17 @@ for (idx in 1:length(l_vars)) {
   plotlist[[idx]] <- p
 } 
 
-# 6 plots at once
+# 6 scatter plots at once
 egg::ggarrange(plotlist[[1]], plotlist[[2]], 
                plotlist[[3]], plotlist[[4]],
                plotlist[[4]], plotlist[[6]], ncol=3, nrow = 2)
 ```
 
+In general, the plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`. 
+
 # Missing value
 
-It's important to inspect the missing values in each variable. How is the ratio of missing value in each feature? What do the missing value mean in each case? Are missing values random? These questions are vital when we deal with the missing value. Removing them immediately without reflecting can cause data size reduction and bias.
+It's important to inspect the missing values in each variable. How is the ratio of missing value in each feature? What does the missing value mean in each case? Are missing values random? These questions are vital when we deal with the missing value. Removing them immediately without reflecting can cause data size reduction and bias.
 
 ```{r missing-values}
 # Number of NA values in each column
@@ -442,7 +438,7 @@ The type of dwelling or house shows no radical differences for each category. Ho
 
 ```{r Bldg.Type}
 # Boxplot price in different building types
-title <- "Type of dwelling"
+title <- "Type of building"
 variable <- "Building Type"
 boxplot_theme(d_house$Bldg.Type, title, variable)
 ```
@@ -451,18 +447,29 @@ boxplot_theme(d_house$Bldg.Type, title, variable)
 
 The same for House Style. The sales price for one story or two story is not strong impacted by the house style. 
 
-```{r House.Style, fig.height=7, fig.width=14}
+```{r House.Style}
 # Boxplot price in different house styles
 title <- "Style of dwelling"
 variable <- "HouseStyle"
 boxplot_theme(d_house$House.Style, title, variable)
 ```
 
+### Foundation
+
+The `Foundation` variable consists of Brick & Tile, Cinder Block, Poured Contrete, Slab, Stone, Wood. The price seems to differ in different type of foundation but again, this can be a factor that was influenced by the `Year.Built`.
+
+```{r Foundation}
+# Boxplot price in different house styles
+title <- "Foundation"
+variable <- "Foundation"
+boxplot_theme(d_house$Foundation, title, variable)
+```
+
 ### Sale conditions
 
 This variable indicate the condition of sale such as normal sale, abnormal sale (trade, short sale), sale between family members, adjoing land purchases etc. The median of the sales price is the highest among the Sales condition which was not completed when last assessed (associated with new homes). 
 
-```{r Sale conditions, fig.height=7, fig.width=14}
+```{r Sale conditions}
 title <- "Condition of sale"
 variable <- "Sale Condition"
 boxplot_theme(d_house$Sale.Condition, title, variable)
@@ -470,62 +477,65 @@ boxplot_theme(d_house$Sale.Condition, title, variable)
 
 ## Testing the effect of categorical variables
 
-After several visualizations, let's fit the model with all highly potential categorical variables and then apply drop1() function to test their significance.
+After several visualizations and descriptive analysis, let's fit the model with all highly potential categorical variables and then apply drop1() function to test their significance.
 
 ```{r drop1-categorical}
-d_house_seclected_categorical <- d_house %>% 
+# Select all categorical might be relevant
+d_house_selected_categorical <- d_house %>% 
   select(MS.Zoning, Neighborhood, Street, House.Style, Sale.Condition)
 
-lm.house.cate.1 <- lm(SalePrice ~ MS.Zoning + Neighborhood + Street + House.Style + Sale.Condition, data = d_house)
+# Fit model with only these categorical variables
+lm_cate_1 <- lm(log(SalePrice) ~ MS.Zoning + Neighborhood + Street + Foundation 
+                + House.Style + Sale.Condition, data = d_house)
 
-drop1(lm.house.cate.1, test = "F")
+# Check their significance effects
+drop1(lm_cate_1, test = "F")
 ```
 
-From the p-value obtained, `Street` does not seem to have a relevant effect on the response variable
-
-# Testing the effects all potential features together
-
-```{r}
-# Testing all potential features together
-lm.house.test <- lm(SalePrice ~ MS.Zoning + Lot.Area + Street + Neighborhood + Bldg.Type + House.Style + Overall.Qual + Year.Built + Foundation + Total.Bsmt.SF + TotRms.AbvGrd + Garage.Cars + Sale.Condition, data = d_house)
-drop1(lm.house.test, test = "F")
-```
+From the p-value obtained, `Street` does not seem to have a relevant effect on the response variable.
 
 ## Variable selection
 
-```{r}
-# # Check which variables are factor
-# (l_factor <- sapply(d_house, function(x) is.factor(x)))
-# 
-# # Get the data frame of factor variables only
-# d_factor <- d_house[ , l_factor]
-# 
-# # Drop the factor variable with only 1 level
-# ifelse(n <- sapply(d_factor, function(x) length(levels(x))) == 1, "DROP", "NODROP")
-# 
-# # Checking d_house factor
-# str(d_house)
-# 
-# # Fit the full model
-# lm_full <- lm(SalePrice ~ ., data = d_house)
-# # lm_full <- lm(SalePrice ~ ., data = d_house)
+As we have seen so far, the linear model describes relationship between the response variable $Y$ and the predictors $X_1,X_2,...X_n$. However, not all explanatory variables play an important role in predicting the random variable. Now, the question is if omitting a predictor would affect the degree to which the model fits the data, substantially deteriorated or not? 
 
-glimpse(d)
+### Stepwise selection
+
+Command `regsubsets` from the library `leaps` runs the whole procedure automatically. Wherever TRUE is written, the corresponding explanatory variable is contained in model.
+
+```{r step-wise-selection}
+# Choose all variables exclude some variables starting with "Bsmt" because cannot run stepwise selection
+d_exclude <- d_house %>% 
+  select(!starts_with("Bsmt"))
+
+# Fit all variables
+lm_full <- lm(log(SalePrice) ~ ., data = d_exclude)
+
+# Forward selection
+reg_model <- regsubsets(log(SalePrice) ~ ., data = d_exclude, na.action=na.exclude,
+                  method = "forward", nvmax = 11)
+reg_sum <- summary(reg_model)
+
+reg_sum$which
 ```
 
-# Stepwise selection
+Based on step wise selection, these are the features containing in the model: Gr.Liv.Area, Overall.Qual, Overall.Cond, Year.Built
 
-```{r just-try-maybe delete}
-# library(leaps)
-# reg <- regsubsets(SalePrice ~ ., data = d_house, na.action=na.exclude, 
-#                   method = "forward", nvmax = 11)
-# reg.sum <- summary(reg)
-# reg.sum$which
-```
- 
- 
-```{r}
-d_house
+### Testing the effects all potential features together
+
+The function `drop1()` gives an overview about the comparison of original model to the model where one explanatory variable was omitted.  
+
+```{r lm-fit-all-potential}
+# Fitting all potential features together
+lm_fit_select <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning + Neighborhood + 
+                      Overall.Qual + Year.Built + Foundation + Total.Bsmt.SF  + 
+                      Garage.Cars + Sale.Condition, data = d_house)
+
+# Testing all potential features together
+drop1(lm_fit_select, test = "F")
+
+# Summary of the model 
+summary(lm_fit_select)
 ```
 
-haha hahahahah
+In this case, the `Neighborhood` feature has 28 levels and many of them are not significant. For the location topic, since we take `Ms.Zoning`, we will exclude the `Neighborhood`. 
+
