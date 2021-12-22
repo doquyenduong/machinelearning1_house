@@ -537,5 +537,5 @@ drop1(lm_fit_select, test = "F")
 summary(lm_fit_select)
 ```
 
-In this case, the `Neighborhood` feature has 28 levels and many of them are not significant. For the location topic, since we take `Ms.Zoning`, we will exclude the `Neighborhood`. 
+In this case, the `Neighborhood` feature has 28 levels and many of them are not significant. For the location topic, since we take `Ms.Zoning`, we will exclude the `Neighborhood`. Hence, our final choice for linear models are:
 
