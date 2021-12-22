@@ -1,5 +1,5 @@
 ---
-title: "Ames Housing Project"
+title: "Ames Housing Project - Exploratory Analysis"
 author: "Quyen Duong, Amin Jamali, Camille Nigon, Pascal Waser"
 date: "Last edited `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -8,13 +8,63 @@ output:
     toc_float: 
       collapsed: false 
       smooth_scroll: false
-    toc_depth: 3
+    toc_depth: 4
     number_section: true 
 ---
+<style type="text/css">
+
+body{ /* Normal  */
+      font-size: 12px;
+}
+code.r{
+  font-size: 11px;
+}
+pre {
+  font-size: 11px
+}
+td {  /* Table  */
+  font-size: 12px;
+}
+h1.title {
+  font-size: 32px;
+  font-weight: bold;
+  text-align: center;
+  color: #2A5A7A;
+  opacity: 0.8;
+}
+h4.author { 
+  font-size: 15px;
+  color: #468faf;
+  text-align: center;
+}
+h4.date { 
+  font-size: 16px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h1 { /* Header 1 */
+  font-size: 22px;
+  color: Black;
+  font-weight: bold;
+}
+h2 { /* Header 2 */
+    font-size: 18px;
+  color: Black;
+  font-weight: bold
+}
+h3 { /* Header 3 */
+  font-size: 15px;
+  color: Black;
+  font-weight: bold
+}
+
+</style>
 
 ```{r setup, include=FALSE}
 # Set the default mode for all the chunks
-knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center", 
+                      fig.height = 5, fig.width = 8)
 ```
 
 ```{r load-packages, include = FALSE}
@@ -22,7 +72,7 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center")
 library(dplyr)
 library(ggplot2)
 library(tidyverse)
-library(scales)                      # formating numbers on axis ggplot
+library(scales)                      # formatting numbers on axis ggplot
 library(gridExtra)
 library(tidyr)
 library(readr)
@@ -38,7 +88,8 @@ library(caret)                       # split data train-test
 library(broom)                       # visualize fitted linear with categorical variable
 library(MASS)
 library(conflicted)                  # set conflict
-
+library(ggthemes)
+library(grid)
 
 # Set conflict preference
 conflict_prefer("filter", "dplyr")
@@ -143,10 +194,10 @@ boxplot_sale_price <- ggplot(d_house, mapping = aes(x = "", y = SalePrice)) +
 egg::ggarrange(histogram_sale_price, boxplot_sale_price, heights = 2:1)
 
 # Descriptive statistics summary of SalePrice
-psych::describe(d_house$SalePrice)
+stats_SalePrice <- psych::describe(d_house$SalePrice)
 ```
 
-The distribution of sale prices displays right-skewed with a long tail. The skew of 1.74 confirms that the data are highly confirmed. Besides, the Kurtosis is 5.1, i.e. Leptokurtic with a longer distribution and fatter tails. Some houses are very expensive. We have to carefully consider whether these expensive houses are outliers. Instead of dropping outliers, we apply the log transformation for sale prices. 
+The distribution of sale prices displays right-skewed with a long tail. The skew of `r stats_SalePrice$skew` confirms that the data are highly confirmed. Besides, the Kurtosis is `r stats_SalePrice$kurtosis`, i.e. Leptokurtic with a longer distribution and fatter tails. Some houses are very expensive. We have to carefully consider whether these expensive houses are outliers. Instead of dropping outliers, we apply the log transformation for sale prices. 
 
 ```{r log-sales-price}
 # Add a column of Log Sale Price
@@ -154,7 +205,7 @@ d_house <- d_house %>%
   mutate(Log.SalePrice = log(SalePrice))
 ```
 
-From the beginning to this point, we just follow the intuition for variable selection. However, this method can be subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.    
+From the beginning to this point, we just follow the intuition for variable selection. However, this method can be too subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.    
 
 # Numerical variable analysis
 
@@ -195,14 +246,14 @@ d_cor_SalePrice <- tibble(var_name = row.names(m_cor_SalePrice),
 d_cor_SalePrice 
 ```
 
-Remarkably, `Lot.Area`, the lot size in square feet is one of the variable we considered as important at the first sight but here, its correlation to the `SalePrice` is only 0.31. Let's look at the scatter plot of these two variables:
+Both variables have long tails to the right and many outliers. 
+
+Remarkably, `Lot.Area`, the lot size in square feet is one of the variable we considered as important at the first sight but its correlation to the `SalePrice` is only 0.31. Let's look at the scatter plot of these two variables:
 
 ```{r scatter-SalePrice-Lot.Area}
 # Scatter plot SalePrice & Lot.Area
 scatter_price_lot <- ggplot(d_house, aes(x = Lot.Area, y = SalePrice)) + 
   geom_point() 
-  # xlim(0, 50000) +
-  # ylim(0, 500000)
 
 # Scatter plot SalePrice & Lot.Area but change the x & y range
 scatter_price_lot2 <- ggplot(d_house, aes(x = Lot.Area, y = SalePrice)) + 
@@ -214,7 +265,9 @@ scatter_price_lot2 <- ggplot(d_house, aes(x = Lot.Area, y = SalePrice)) +
 egg::ggarrange(scatter_price_lot, scatter_price_lot2, ncol=2, nrow = 1)
 ```
 
-Both variables have long tails to the right and many outliers. 
+The two plots show the same information but the right scatter displays the removal of outliers. The `Lot.Area` data points stay mostly at the smaller value and their price varies vertically for the same lot space.
+
+## Top 10 variables correlated to SalePrice
 
 The top 10 numerical features with the absolute highest correlation with the `SalePrice` are now selected and we produce a SalePrice correlation matrix as below:  
 
@@ -239,7 +292,7 @@ m_cor_top_10 <- cor(d_house_numeric %>%
 corrplot(m_cor_top_10, method = "color", addCoef.col="black", type = 'lower',
          order = "alphabet", number.cex=0.55, tl.cex = 0.55)
 
-#Quick look on the scatter plot in pair for the top 10
+# Quick look on the scatter plot in pair for the top 10
 ggpairs(d_house_numeric %>% select(all_of(v_top_10_cor)))
 ```
 
@@ -248,9 +301,37 @@ From the new correlation matrix, some important findings are found:
 * `Garage.Area` and `Garage.Cars` are correlated highly with the dependent variable but they have the same information. Here, we keep the `Garage.Cars` as its higher correlation.  
 * `SalePrice` is strongly correlated to `Gr.Liv.Area`, `Overall.Qual`, `Total.Bsmt.SF` 
 * `Full.Bath` seems to be strange here
-* `BsmtFin.SF.1` and `Total.Bsmt.SF` display the related infomation, we choose `Total.Bsmt.SF` in this case
+* `BsmtFin.SF.1` and `Total.Bsmt.SF` display the related information, we choose `Total.Bsmt.SF` in this case
 * `TotRms.AbvGrd` and `Gr.Liv.Area` are similar. Here, we choose `Gr.Liv.Area`
 * `Year.Built`: 0.55 - moderately correlated to `SalePrice` 
+
+After choosing the variables, let's make scatter plots to check the relationship between SalePrice and other variables
+
+```{r scatter-plots-selected-var-vs-SalePrice}
+# Selected numerical variables
+d_select_num <- d_house_numeric %>% 
+  select(SalePrice, Garage.Cars, Gr.Liv.Area, Overall.Qual, Total.Bsmt.SF, Full.Bath, Year.Built)
+
+# list of selected variables 
+l_vars <- c("Garage.Cars",  "Gr.Liv.Area", "Overall.Qual", "Total.Bsmt.SF", "Full.Bath",  "Year.Built")
+
+# empty list for scatter plot
+plotlist <- list()
+
+# For loop to get several scatter plots at once
+for (idx in 1:length(l_vars)) {
+  this_var <- l_vars[idx]
+  p <- ggplot(d_select_num, aes_string(x = this_var, y = "SalePrice")) +
+    geom_point() +
+    geom_smooth(method = lm)
+  plotlist[[idx]] <- p
+} 
+
+# 6 plots at once
+egg::ggarrange(plotlist[[1]], plotlist[[2]], 
+               plotlist[[3]], plotlist[[4]],
+               plotlist[[4]], plotlist[[6]], ncol=3, nrow = 2)
+```
 
 # Missing value
 
@@ -281,16 +362,6 @@ d_summary_missing_value
 # Exclude the columns with 49% missing value
 d_house <- d_house %>% 
   select(-c(Alley, Fireplace.Qu, Pool.QC, Fence, Misc.Feature))
-
-# Change NA value for all the basement variables "Bsmt"
-# v_basement_catgorical <- c("Bsmt.Qual", "Bsmt.Cond", "Bsmt.Exposure", "BsmtFin.Type.1", "BsmtFin.Type.2")
-# 
-# d_house %>%  
-#   mutate(Bsmt.Qual = ifelse(is.na(Bsmt.Qual), "Not there", Bsmt.Qual))
-# 
-# d_house[v_basement_catgorical][is.na(d_house[v_basement_catgorical])] <- "No"
-# 
-# d_house$Bsmt.Qual
 ```
 
 After examine the missing ratio, here are some decisions:
@@ -301,32 +372,101 @@ After examine the missing ratio, here are some decisions:
 
 # Categorical variables
 
-In this section, we will check the effects of different categorical features that are potentially relevant for the model. Before applying function drop1(), we will visualize SalePrice with several categorical variables
+In this section, we check the effects of different categorical features that are potentially relevant for the model. Before applying function drop1(), we visualize SalePrice with several categorical variables
 
 ## Visualizations of categorical variables
 
-### MS.Zoning
+```{r Boxplot-Fuction}
+# Make a function to draw all box plots
+fill <- "#FFFFFF"
+line <- "#000000"
 
-```{r ms.zoning}
-boxplot(SalePrice ~ MS.Zoning, data = d_house)
+boxplot_theme <- function(variable_input, title, variable) {
+  output <- ggplot(d_house, aes(x = variable_input, y = SalePrice)) +
+    geom_boxplot(fill = fill, colour = line) +
+    ggtitle(title) +
+    theme_minimal() +
+    scale_y_continuous(labels = comma) +
+    xlab(paste0("\n", variable)) +
+    ylab("Price\n") +
+    theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
+          legend.position = "bottom", legend.direction = "horizontal",
+          legend.box = "horizontal",
+          legend.key.size = unit(1, "cm"),
+          plot.title = element_text(family="Tahoma", hjust = 0.5),
+          text = element_text(family = "Tahoma"),
+          axis.title = element_text(size = 10),
+          legend.text = element_text(size = 9),
+          legend.title=element_text(face = "bold"))
+
+  return(output)
+}  
 ```
 
-`SalePrice` seems to differ among different `MSZoning`. Here, `MSZoning` identifies the general zoning classification of the sales such as agriculture, commercial, industrial.
+### MS.Zoning
+
+`SalePrice` seems to vary among different `MSZoning`. Here, `MSZoning` identifies the general zoning classification of the sales such as agriculture, commercial, industrial. Especially Residential with low density (RL) and residential with medium density are strongly right skewed.
+
+```{r ms.zoning}
+# Boxplot price in ms zonings
+title <- "General Zoning Classification"
+variable <- "MS Zoning"
+boxplot_theme(d_house$MS.Zoning, title, variable)
+```
 
 ### Lot Shape
-Draw here
+
+The general shapes of the property appear to be similar. With the exception that properties with a regular shape has a lower value compared to an irregular shape.
+
+```{r LotShape}
+# Boxplot price in different lot shapes
+title <- "General shape of property"
+variable <- "Lot Shape"
+boxplot_theme(d_house$Lot.Shape, title, variable)
+```
 
 ### Neighborhood
-Draw here
+
+We identified especially in the neighborhoods strong variances regarding the prices. Especially Northridge (NoRidge) has a high price per property and shows some outliers in the direction of an higher price. 
+
+```{r Neighborhood}
+# Boxplot price in different neighborhoods
+title <- "Physical locations within Ames city limits"
+variable <- "Neighborhood"
+boxplot_theme(d_house$Neighborhood, title, variable)
+```
 
 ### Bldg.Type
-Draw here
+
+The type of dwelling or house shows no radical differences for each category. However, Single-family Detached (1Fam) has the highest potential for an higher price.
+
+```{r Bldg.Type}
+# Boxplot price in different building types
+title <- "Type of dwelling"
+variable <- "Building Type"
+boxplot_theme(d_house$Bldg.Type, title, variable)
+```
 
 ### House.Style
-Draw here
+
+The same for House Style. The sales price for one story or two story is not strong impacted by the house style. 
+
+```{r House.Style, fig.height=7, fig.width=14}
+# Boxplot price in different house styles
+title <- "Style of dwelling"
+variable <- "HouseStyle"
+boxplot_theme(d_house$House.Style, title, variable)
+```
 
 ### Sale conditions
-Draw here
+
+This variable indicate the condition of sale such as normal sale, abnormal sale (trade, short sale), sale between family members, adjoing land purchases etc. The median of the sales price is the highest among the Sales condition which was not completed when last assessed (associated with new homes). 
+
+```{r Sale conditions, fig.height=7, fig.width=14}
+title <- "Condition of sale"
+variable <- "Sale Condition"
+boxplot_theme(d_house$Sale.Condition, title, variable)
+```
 
 ## Testing the effect of categorical variables
 
@@ -370,6 +510,7 @@ drop1(lm.house.test, test = "F")
 # lm_full <- lm(SalePrice ~ ., data = d_house)
 # # lm_full <- lm(SalePrice ~ ., data = d_house)
 
+glimpse(d)
 ```
 
 # Stepwise selection
