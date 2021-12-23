@@ -78,5 +78,13 @@ d_test <- d_house %>%
   slice(-indices) 
 ```
 
+Please write your findings here in each comment. 
 
+name the model this way: example: 
 
+lm1_train for the lm # 1 of the train data
+lm_final for the chosen model
+pred_lm1_test for the prediction of the test data
+
+d_ : dataframe
+v_ : vector

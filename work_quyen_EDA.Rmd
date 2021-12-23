@@ -374,7 +374,7 @@ d_summary_missing_value <- tibble(var_name = row.names(d_summary_missing_value),
        n_missing = d_summary_missing_value[, "number"],
        perc_missing = d_summary_missing_value[, "ratio"]) %>% 
   arrange(desc(perc_missing)) 
-d_summary_missing_value %>% View()
+d_summary_missing_value 
 
 # Exclude the columns with 49% missing value
 d_house <- d_house %>% 
@@ -606,7 +606,7 @@ To choose the best linear model, we fit several models on the train data and che
 # Simple model based on stepwise variables
 lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
                   Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
-                  MS.Zoning + Neighborhood + Bldg.Type + Functional, 
+                  MS.Zoning + Bldg.Type + Functional, 
                 data = d_train)
 # Predict the model 1 on test data
 pred_lm1_test <- predict(lm1_train, newdata = d_test)
@@ -624,7 +624,7 @@ broom::glance(lm1_train)
 ```
 
 ```{r lm-model-2}
-# Simple model based on stepwise variables
+# Simple model 
 lm2_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + Overall.Qual + 
                   MS.Zoning, data = d_train)
 # Predict the model 2 on test data
@@ -666,7 +666,7 @@ broom::glance(lm3_train)
 
 ```{r lm-model-4}
 # Simple model based on stepwise variables
-lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +Neighborhood +
+lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +
                       Overall.Qual + Bldg.Type + Year.Built +
                       Garage.Cars + Sale.Condition,
                 na.action=na.omit,
@@ -684,9 +684,6 @@ accuracy(exp(pred_lm4_test), d_test$SalePrice)
 
 # more info about the model
 broom::glance(lm4_train)
-
-
-d_house$Neighborhood
 ```
 
 
