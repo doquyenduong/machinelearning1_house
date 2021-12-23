@@ -600,7 +600,7 @@ To choose the best linear model, we fit several models on the train data and che
 ```{r lm-model-1}
 # Simple model based on stepwise variables
 lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + 
-                  Overall.Qual + Overall.Cond + Total.Bsmt.SF + , data = d_train)
+                  Overall.Qual + Overall.Cond + Total.Bsmt.SF, data = d_train)
 # Predict the model 1 on test data
 pred_lm1_test <- predict(lm1_train, newdata = d_test)
 
