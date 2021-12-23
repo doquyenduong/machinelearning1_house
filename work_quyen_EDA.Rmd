@@ -141,7 +141,7 @@ my_blank_theme <- theme_minimal()+
 
 # Motivation and purpose
 
-The study attempts to predict the house price in Ames, Iowa. To predict the house price, several machine learning methods will be used such as linear model (LM), Generalised Linear Model (GLM), Generalised Additive Model (GAM), Neural Network (NN), Support Vector Machine (SVM) and Approximate Bayesian Computation. Yet, before predicting price and applying models, it's vital to explore and understand the data. 
+The study attempts to predict the house price in Ames, Iowa. To predict the house price, several machine learning methods will be used such as linear model (LM), Generalized Linear Model (GLM), Generalized Additive Model (GAM), Neural Network (NN), Support Vector Machine (SVM) and Optimization. Yet, before predicting price and applying models, it's vital to explore and understand the data. 
 
 # Data comprehension
 
@@ -374,11 +374,14 @@ d_summary_missing_value <- tibble(var_name = row.names(d_summary_missing_value),
        n_missing = d_summary_missing_value[, "number"],
        perc_missing = d_summary_missing_value[, "ratio"]) %>% 
   arrange(desc(perc_missing)) 
-d_summary_missing_value
+d_summary_missing_value %>% View()
 
 # Exclude the columns with 49% missing value
 d_house <- d_house %>% 
   select(-c(Alley, Fireplace.Qu, Pool.QC, Fence, Misc.Feature))
+
+# Remove the 1 NA rows from two important columns
+d_house <- d_house %>% drop_na(Garage.Cars, Total.Bsmt.SF)
 ```
 
 After examine the missing ratio, here are some decisions:
@@ -571,6 +574,8 @@ drop1(lm_fit_select, test = "F")
 summary(lm_fit_select)
 ```
 
+### Predictor summary
+
 To sum up, we started with intuition analysis, numerical variable, then categorical variable analysis. Afterward, the step wise selection were conducted. Next, the `drop1` function to test the relevant effect of different variables on the response variables. Below is the finding summary of variables, which we focus from different methods:
 
 ![](summary_predictor_of_focus.png)
@@ -595,12 +600,14 @@ d_test <- d_house %>%
 
 # Linear model
 
-To choose the best linear model, we fit several models on the train data and check the errors on the test data. At the end, we chose the best result for linear model. 
+To choose the best linear model, we fit several models on the train data and check the errors on the test data. At the end, we chose the best result for linear model. The fitting model process, we will use out sample cross validation, meaning that fitting model with train data and predict on the test data:
 
 ```{r lm-model-1}
 # Simple model based on stepwise variables
-lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + 
-                  Overall.Qual + Overall.Cond + Total.Bsmt.SF, data = d_train)
+lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
+                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
+                  MS.Zoning + Neighborhood + Bldg.Type + Functional, 
+                data = d_train)
 # Predict the model 1 on test data
 pred_lm1_test <- predict(lm1_train, newdata = d_test)
 
@@ -677,6 +684,9 @@ accuracy(exp(pred_lm4_test), d_test$SalePrice)
 
 # more info about the model
 broom::glance(lm4_train)
+
+
+d_house$Neighborhood
 ```
 
 
