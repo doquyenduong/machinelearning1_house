@@ -91,6 +91,8 @@ library(conflicted)                  # set conflict
 library(ggthemes)
 library(grid)
 library(leaps)                       # stepwise selection
+library(caret)                       # splitting train-test, SVM
+library(forecast)                    # calculate RMSE
 
 # Set conflict preference
 conflict_prefer("filter", "dplyr")
@@ -166,7 +168,7 @@ There are 82 variables and 2930 observations in the data set. As there are many 
 * Reading and understanding every variable description
 * Make a new Excel with two columns: variable name and importance to sale price (Yes/No). The decision of Yes/No is grounded on intuition, expectation and some house-price related articles. To be more specific, we question these following questions: which factor matters when we buy a house? How important would this factor be? Does this factor appear in other variables?
 
-The intuition-based Excel file can be found in the ´variables_intuition_analysis.xlsx´. At the first glimpse, we marked these might-be-relevant features to the SalePrice: MS.Zoning, Lot.Area, Street, Lot.Shape, Neighborhood, Bldg.Type, House.Style, Overall.Qual, Year.Built, Foundation, Total.Bsmt.SF, TotRms.AbvGrd, Mo.Sold, Yr.Sold, Garage.Cars, Sale.Condition.
+The intuition-based Excel file can be found in the `variables_intuition_analysis.xlsx`. At the first glimpse, we marked these might-be-relevant features to the SalePrice: MS.Zoning, Lot.Area, Street, Lot.Shape, Neighborhood, Bldg.Type, House.Style, Overall.Qual, Year.Built, Foundation, Total.Bsmt.SF, TotRms.AbvGrd, Mo.Sold, Yr.Sold, Garage.Cars, Sale.Condition.
 
 After thinking of potential features, let's inspect the response variable in the next part. 
 
@@ -294,7 +296,7 @@ From the new correlation matrix, some important findings are found:
 
 * `Garage.Area` and `Garage.Cars` are correlated highly with the dependent variable but they have the same information. Here, we keep the `Garage.Cars` as its higher correlation.  
 * `SalePrice` is strongly correlated to `Gr.Liv.Area`, `Overall.Qual`, `Total.Bsmt.SF` 
-* `Full.Bath` seems to be strange here
+* `Full.Bath` means full bathrooms above grade/ground. It seems to be strange here
 * `BsmtFin.SF.1` and `Total.Bsmt.SF` display the related information, we choose `Total.Bsmt.SF` in this case
 * `TotRms.AbvGrd` and `Gr.Liv.Area` are similar. Here, we choose `Gr.Liv.Area`
 * `Year.Built`: 0.55 - moderately correlated to `SalePrice` 
@@ -312,7 +314,7 @@ l_vars <- c("Garage.Cars",  "Gr.Liv.Area", "Overall.Qual", "Total.Bsmt.SF", "Ful
 # empty list for scatter plot
 plotlist <- list()
 
-# For loop to get several scatter plots at once
+# For loop to get several scatter plots at once with method = lm
 for (idx in 1:length(l_vars)) {
   this_var <- l_vars[idx]
   p <- ggplot(d_select_num, aes_string(x = this_var, y = "SalePrice")) +
@@ -324,10 +326,29 @@ for (idx in 1:length(l_vars)) {
 # 6 scatter plots at once
 egg::ggarrange(plotlist[[1]], plotlist[[2]], 
                plotlist[[3]], plotlist[[4]],
-               plotlist[[4]], plotlist[[6]], ncol=3, nrow = 2)
+               plotlist[[5]], plotlist[[6]], ncol=3, nrow = 2)
 ```
 
-In general, the plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`. 
+In general, some plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`. 
+
+```{r scatter-plots-version-2}
+# empty list for scatter plot
+plotlist2 <- list()
+
+# For loop to get several scatter plots at once with not linear line
+for (idx in 1:length(l_vars)) {
+  this_var <- l_vars[idx]
+  p <- ggplot(d_select_num, aes_string(x = this_var, y = "SalePrice")) +
+    geom_point() +
+    geom_smooth()
+  plotlist2[[idx]] <- p
+} 
+
+# 6 scatter plots at once
+egg::ggarrange(plotlist2[[1]], plotlist2[[2]], 
+               plotlist2[[3]], plotlist2[[4]],
+               plotlist2[[5]], plotlist2[[6]], ncol=3, nrow = 2)
+```
 
 # Missing value
 
@@ -383,8 +404,7 @@ boxplot_theme <- function(variable_input, title, variable) {
     ggtitle(title) +
     theme_minimal() +
     scale_y_continuous(labels = comma) +
-    xlab(paste0("\n", variable)) +
-    ylab("Price\n") +
+    labs(x = paste0("\n", variable), y = "Price\n") + 
     theme(axis.text.x = element_text(angle = 45, vjust = 0.5, hjust=1),
           legend.position = "bottom", legend.direction = "horizontal",
           legend.box = "horizontal",
@@ -401,7 +421,7 @@ boxplot_theme <- function(variable_input, title, variable) {
 
 ### MS.Zoning
 
-`SalePrice` seems to vary among different `MSZoning`. Here, `MSZoning` identifies the general zoning classification of the sales such as agriculture, commercial, industrial. Especially Residential with low density (RL) and residential with medium density are strongly right skewed.
+`SalePrice` seems to vary among different `MSZoning`. Here, `MSZoning` identifies the general zoning classification of the sales such as agriculture, commercial, industrial. Especially Residential with low density (RL) and residential with medium density (RM) are strongly right skewed.
 
 ```{r ms.zoning}
 # Boxplot price in ms zonings
@@ -434,7 +454,7 @@ boxplot_theme(d_house$Neighborhood, title, variable)
 
 ### Bldg.Type
 
-The type of dwelling or house shows no radical differences for each category. However, Single-family Detached (1Fam) has the highest potential for an higher price.
+The type of dwelling or house shows no radical differences for each category's median price. However, Single-family Detached (1Fam) has the highest potential and many tails to the higher prices.
 
 ```{r Bldg.Type}
 # Boxplot price in different building types
@@ -465,6 +485,17 @@ variable <- "Foundation"
 boxplot_theme(d_house$Foundation, title, variable)
 ```
 
+### Functional
+
+The `Functional` variable consists of Brick & Tile, Cinder Block, Poured Contrete, Slab, Stone, Wood. The price seems to differ in different type of foundation but again, this can be a factor that was influenced by the `Year.Built`.
+
+```{r Functional}
+# Boxplot price in different house styles
+title <- "Functional"
+variable <- "Functional"
+boxplot_theme(d_house$Functional, title, variable)
+```
+
 ### Sale conditions
 
 This variable indicate the condition of sale such as normal sale, abnormal sale (trade, short sale), sale between family members, adjoing land purchases etc. The median of the sales price is the highest among the Sales condition which was not completed when last assessed (associated with new homes). 
@@ -485,8 +516,9 @@ d_house_selected_categorical <- d_house %>%
   select(MS.Zoning, Neighborhood, Street, House.Style, Sale.Condition)
 
 # Fit model with only these categorical variables
-lm_cate_1 <- lm(log(SalePrice) ~ MS.Zoning + Neighborhood + Street + Foundation 
-                + House.Style + Sale.Condition, data = d_house)
+lm_cate_1 <- lm(log(SalePrice) ~ MS.Zoning + Neighborhood + Street + Foundation + 
+                Bldg.Type + House.Style + Sale.Condition + Functional, 
+                data = d_house)
 
 # Check their significance effects
 drop1(lm_cate_1, test = "F")
@@ -494,9 +526,9 @@ drop1(lm_cate_1, test = "F")
 
 From the p-value obtained, `Street` does not seem to have a relevant effect on the response variable.
 
-## Variable selection
+## Predictors of focus
 
-As we have seen so far, the linear model describes relationship between the response variable $Y$ and the predictors $X_1,X_2,...X_n$. However, not all explanatory variables play an important role in predicting the random variable. Now, the question is if omitting a predictor would affect the degree to which the model fits the data, substantially deteriorated or not? 
+As we have seen so far, the linear model describes relationship between the response variable $Y$ and the predictors $X_1,X_2,...X_n$. However, not all explanatory variables play an important role in predicting the random variable. Now, the question is if omitting a predictor would affect the degree to which the model fits the data, substantially deteriorated or not? As we will not fit the model with 74 predictors, it's vital to choose some focus variables, which are more potential and relevant for our model. 
 
 ### Stepwise selection
 
@@ -518,7 +550,7 @@ reg_sum <- summary(reg_model)
 reg_sum$which
 ```
 
-Based on step wise selection, these are the features containing in the model: Gr.Liv.Area, Overall.Qual, Overall.Cond, Year.Built
+Based on step wise selection, these are the features containing in the model: Gr.Liv.Area, Overall.Qual, Overall.Cond, Year.Built, Total.Bsmt.SF, Fireplaces, Garage.Cars. Some categorical variables with TRUE in one of the sub-categories are MS.Zoning, Neighborhood, Bldg.Type, Functional
 
 ### Testing the effects all potential features together
 
@@ -527,8 +559,10 @@ The function `drop1()` gives an overview about the comparison of original model 
 ```{r lm-fit-all-potential}
 # Fitting all potential features together
 lm_fit_select <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning + Neighborhood + 
-                      Overall.Qual + Year.Built + Foundation + Total.Bsmt.SF  + 
-                      Garage.Cars + Sale.Condition, data = d_house)
+                      Overall.Qual + Overall.Cond + Bldg.Type + Year.Built + 
+                      Foundation + Total.Bsmt.SF + Fireplaces + Functional + 
+                      House.Style + Garage.Cars + Sale.Condition, 
+                    data = d_house)
 
 # Testing all potential features together
 drop1(lm_fit_select, test = "F")
@@ -537,5 +571,124 @@ drop1(lm_fit_select, test = "F")
 summary(lm_fit_select)
 ```
 
-In this case, the `Neighborhood` feature has 28 levels and many of them are not significant. For the location topic, since we take `Ms.Zoning`, we will exclude the `Neighborhood`. Hence, our final choice for linear models are:
+To sum up, we started with intuition analysis, numerical variable, then categorical variable analysis. Afterward, the step wise selection were conducted. Next, the `drop1` function to test the relevant effect of different variables on the response variables. Below is the finding summary of variables, which we focus from different methods:
+
+![](summary_predictor_of_focus.png)
+
+# Train and test data
+
+The data are divided into 70% train data and 30% test data because there are 2930 observations, which are large enough for that ratio.
+
+```{r train-test}
+set.seed(12)
+# We choose 70% for train data
+indices <- createDataPartition(d_house$SalePrice, p = 0.70, list = F)
+
+# Train data
+d_train <- d_house %>%
+  slice(indices)
+
+# Test data
+d_test <- d_house %>%
+  slice(-indices) 
+```
+
+# Linear model
+
+To choose the best linear model, we fit several models on the train data and check the errors on the test data. At the end, we chose the best result for linear model. 
+
+```{r lm-model-1}
+# Simple model based on stepwise variables
+lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + 
+                  Overall.Qual + Overall.Cond + Total.Bsmt.SF + , data = d_train)
+# Predict the model 1 on test data
+pred_lm1_test <- predict(lm1_train, newdata = d_test)
+
+# R^2
+r_squared_lm1 <- cor(exp(pred_lm1_test), d_test$SalePrice)^2
+# RMSE
+## Way 1: manually
+sqrt(mean((exp(pred_lm1_test) - d_test$SalePrice)^2))
+## Way 2: by function
+accuracy(exp(pred_lm1_test), d_test$SalePrice)
+
+# more info about the model
+broom::glance(lm1_train)
+```
+
+```{r lm-model-2}
+# Simple model based on stepwise variables
+lm2_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + Overall.Qual + 
+                  MS.Zoning, data = d_train)
+# Predict the model 2 on test data
+pred_lm2_test <- predict(lm2_train, newdata = d_test)
+# R^2
+r_squared_lm2 <- cor(exp(pred_lm2_test), d_test$SalePrice)^2
+# RMSE
+## Way 1: manually
+sqrt(mean((exp(pred_lm2_test) - d_test$SalePrice)^2))
+
+## Way 2: by function
+accuracy(exp(pred_lm2_test), d_test$SalePrice)
+
+# more info about the model
+broom::glance(lm1_train)
+```
+
+```{r lm-model-3}
+# Simple model based on stepwise variables
+lm3_train <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning +
+                      Overall.Qual + Bldg.Type + Year.Built + Foundation + 
+                      Total.Bsmt.SF + House.Style + Garage.Cars + Sale.Condition,
+                na.action=na.omit,
+                data = d_train)
+# Predict the model 2 on test data
+pred_lm3_test <- predict(lm3_train, newdata = d_test)
+# R^2
+r_squared_lm3 <- cor(exp(pred_lm3_test), d_test$SalePrice)^2
+# RMSE
+## Way 1: manually
+sqrt(mean((exp(pred_lm3_test) - d_test$SalePrice)^2))
+
+## Way 2: by function
+accuracy(exp(pred_lm3_test), d_test$SalePrice)
+
+# more info about the model
+broom::glance(lm3_train)
+```
+
+```{r lm-model-4}
+# Simple model based on stepwise variables
+lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +Neighborhood +
+                      Overall.Qual + Bldg.Type + Year.Built +
+                      Garage.Cars + Sale.Condition,
+                na.action=na.omit,
+                data = d_train)
+# Predict the model 2 on test data
+pred_lm4_test <- predict(lm4_train, newdata = d_test)
+# R^2
+r_squared_lm4 <- cor(exp(pred_lm4_test), d_test$SalePrice)^2
+# RMSE
+## Way 1: manually
+sqrt(mean((exp(pred_lm4_test) - d_test$SalePrice)^2))
+
+## Way 2: by function
+accuracy(exp(pred_lm4_test), d_test$SalePrice)
+
+# more info about the model
+broom::glance(lm4_train)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
 
