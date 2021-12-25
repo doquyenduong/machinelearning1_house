@@ -561,17 +561,17 @@ The function `drop1()` gives an overview about the comparison of original model 
 
 ```{r lm-fit-all-potential}
 # Fitting all potential features together
-lm_fit_select <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning + Neighborhood + 
+lm_fit_focus <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning + Neighborhood + 
                       Overall.Qual + Overall.Cond + Bldg.Type + Year.Built + 
                       Foundation + Total.Bsmt.SF + Fireplaces + Functional + 
                       House.Style + Garage.Cars + Sale.Condition, 
                     data = d_house)
 
 # Testing all potential features together
-drop1(lm_fit_select, test = "F")
+drop1(lm_fit_focus, test = "F")
 
 # Summary of the model 
-summary(lm_fit_select)
+summary(lm_fit_focus)
 ```
 
 ### Predictor summary
@@ -582,12 +582,16 @@ To sum up, we started with intuition analysis, numerical variable, then categori
 
 # Train and test data
 
-The data are divided into 70% train data and 30% test data because there are 2930 observations, which are large enough for that ratio.
+The data are divided into 70% train data and 30% test data because there are 2930 observations, which are large enough for that ratio. From the scatter plots in the numerical analysis part, there are some outliers, which do not follow the trend in the Gr.Liv.Area and Total.Bsmt.SF. Thus, we remove them first before fitting the model because keeping them will make the errors become extremely high and there are only 3 outliers. 
 
 ```{r train-test}
 set.seed(12)
 # We choose 70% for train data
 indices <- createDataPartition(d_house$SalePrice, p = 0.70, list = F)
+
+# Remove outliers from Gr.Liv.Area & Total.Bmst.SF
+d_house <- d_house %>%
+  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500)
 
 # Train data
 d_train <- d_house %>%
@@ -600,24 +604,26 @@ d_test <- d_house %>%
 
 # Linear model
 
+## Fitting several models
+
 To choose the best linear model, we fit several models on the train data and check the errors on the test data. At the end, we chose the best result for linear model. The fitting model process, we will use out sample cross validation, meaning that fitting model with train data and predict on the test data:
 
 ```{r lm-model-1}
-# Simple model based on stepwise variables
+# Model based on stepwise variables
 lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
                   Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
                   MS.Zoning + Bldg.Type + Functional, 
-                data = d_train)
+                data = d_lm_train)
 # Predict the model 1 on test data
-pred_lm1_test <- predict(lm1_train, newdata = d_test)
+pred_lm1_test <- predict(lm1_train, newdata = d_lm_test)
 
 # R^2
-r_squared_lm1 <- cor(exp(pred_lm1_test), d_test$SalePrice)^2
+r_squared_lm1 <- cor(exp(pred_lm1_test), d_lm_test$SalePrice)^2
 # RMSE
 ## Way 1: manually
-sqrt(mean((exp(pred_lm1_test) - d_test$SalePrice)^2))
+sqrt(mean((exp(pred_lm1_test) - d_lm_test$SalePrice)^2))
 ## Way 2: by function
-accuracy(exp(pred_lm1_test), d_test$SalePrice)
+accuracy(exp(pred_lm1_test), d_lm_test$SalePrice)
 
 # more info about the model
 broom::glance(lm1_train)
@@ -632,18 +638,13 @@ pred_lm2_test <- predict(lm2_train, newdata = d_test)
 # R^2
 r_squared_lm2 <- cor(exp(pred_lm2_test), d_test$SalePrice)^2
 # RMSE
-## Way 1: manually
-sqrt(mean((exp(pred_lm2_test) - d_test$SalePrice)^2))
-
-## Way 2: by function
 accuracy(exp(pred_lm2_test), d_test$SalePrice)
-
 # more info about the model
 broom::glance(lm1_train)
 ```
 
 ```{r lm-model-3}
-# Simple model based on stepwise variables
+# Model with 
 lm3_train <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning +
                       Overall.Qual + Bldg.Type + Year.Built + Foundation + 
                       Total.Bsmt.SF + House.Style + Garage.Cars + Sale.Condition,
@@ -654,18 +655,13 @@ pred_lm3_test <- predict(lm3_train, newdata = d_test)
 # R^2
 r_squared_lm3 <- cor(exp(pred_lm3_test), d_test$SalePrice)^2
 # RMSE
-## Way 1: manually
-sqrt(mean((exp(pred_lm3_test) - d_test$SalePrice)^2))
-
-## Way 2: by function
 accuracy(exp(pred_lm3_test), d_test$SalePrice)
-
 # more info about the model
 broom::glance(lm3_train)
 ```
 
 ```{r lm-model-4}
-# Simple model based on stepwise variables
+# Model based on stepwise variables
 lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +
                       Overall.Qual + Bldg.Type + Year.Built +
                       Garage.Cars + Sale.Condition,
@@ -676,20 +672,93 @@ pred_lm4_test <- predict(lm4_train, newdata = d_test)
 # R^2
 r_squared_lm4 <- cor(exp(pred_lm4_test), d_test$SalePrice)^2
 # RMSE
-## Way 1: manually
-sqrt(mean((exp(pred_lm4_test) - d_test$SalePrice)^2))
-
-## Way 2: by function
 accuracy(exp(pred_lm4_test), d_test$SalePrice)
-
 # more info about the model
 broom::glance(lm4_train)
 ```
 
+```{r lm-model-5}
+# Model with intuition variables
+lm5_train <- lm(log(SalePrice) ~ Overall.Qual + Year.Built + Overall.Cond + 
+                  MS.Zoning + Bldg.Type + Sale.Condition, 
+                data = d_train)
+
+# Predict the model 2 on test data
+pred_lm5_test <- predict(lm5_train, newdata = d_test)
+# R^2
+r_squared_lm5 <- cor(exp(pred_lm5_test), d_test$SalePrice)^2
+# RMSE
+accuracy(exp(pred_lm5_test), d_test$SalePrice)
+# more info about the model
+broom::glance(lm5_train)
+```
+
+Linear model 5 appears as the best one. 
+
+```{r lm-model-6}
+# Model with high correlated variables
+lm6_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built + 
+                  Full.Bath, 
+                data = d_train)
+
+# Predict the model 2 on test data
+pred_lm6_test <- predict(lm6_train, newdata = d_test)
+# R^2
+r_squared_lm6 <- cor(exp(pred_lm6_test), d_test$SalePrice)^2
+# RMSE
+accuracy(exp(pred_lm6_test), d_test$SalePrice)
+# more info about the model
+broom::glance(lm5_train)
+```
 
 
+```{r lm-model-7}
+# Model with variables appearing in several analysis
+lm7_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built + 
+                  Total.Bsmt.SF + Garage.Cars + MS.Zoning + Bldg.Type + 
+                  Functional, 
+                data = d_train)
+# Predict the model 2 on test data
+pred_lm7_test <- predict(lm7_train, newdata = d_test)
+# R^2
+r_squared_lm7 <- cor(exp(pred_lm7_test), d_test$SalePrice)^2
+# RMSE
+accuracy(exp(pred_lm7_test), d_test$SalePrice)
+# more info about the model
+broom::glance(lm7_train)
+```
 
+```{r lm-model-8}
+# Model with variables appearing in several analysis
+lm8_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built  + 
+                  Garage.Cars + MS.Zoning + Bldg.Type + Functional, 
+                data = d_train)
+# Predict the model 2 on test data
+pred_lm8_test <- predict(lm8_train, newdata = d_test)
+# R^2
+r_squared_lm8 <- cor(exp(pred_lm8_test), d_test$SalePrice)^2
+# RMSE
+accuracy(exp(pred_lm8_test), d_test$SalePrice)
+# more info about the model
+broom::glance(lm8_train)
+```
 
+```{r lm-model-9}
+# Model with variables appearing in several analysis
+lm9_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built +
+                  Overall.Cond + MS.Zoning + Sale.Condition, 
+                data = d_train)
+# Predict the model 2 on test data
+pred_lm9_test <- predict(lm9_train, newdata = d_test)
+# R^2
+r_squared_lm9 <- cor(exp(pred_lm9_test), d_test$SalePrice)^2
+# RMSE
+accuracy(exp(pred_lm9_test), d_test$SalePrice)
+# more info about the model
+broom::glance(lm9_train)
+```
+
+## The final linear model
 
 
 

@@ -69,6 +69,10 @@ set.seed(12)
 # We choose 70% for train data
 indices <- createDataPartition(d_house$SalePrice, p = 0.70, list = F)
 
+# Remove outliers from Gr.Liv.Area & Total.Bmst.SF
+d_house <- d_house %>%
+  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500)
+
 # Train data
 d_train <- d_house %>%
   slice(indices)
