@@ -589,9 +589,9 @@ set.seed(12)
 # We choose 70% for train data
 indices <- createDataPartition(d_house$SalePrice, p = 0.70, list = F)
 
-# Remove outliers from Gr.Liv.Area & Total.Bmst.SF
+# Remove outliers from Gr.Liv.Area & Total.Bmst.SF & Garage.Cars
 d_house <- d_house %>%
-  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500)
+  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500 & Garage.Cars < 5)
 
 # Train data
 d_train <- d_house %>%
@@ -613,7 +613,7 @@ To choose the best linear model, we fit several models on the train data and che
 lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
                   Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
                   MS.Zoning + Bldg.Type + Functional, 
-                data = d_lm_train)
+                data = d_train)
 # Predict the model 1 on test data
 pred_lm1_test <- predict(lm1_train, newdata = d_lm_test)
 
