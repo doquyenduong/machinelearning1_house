@@ -546,8 +546,8 @@ d_exclude <- d_house %>%
 lm_full <- lm(log(SalePrice) ~ ., data = d_exclude)
 
 # Forward selection
-reg_model <- regsubsets(log(SalePrice) ~ ., data = d_exclude, na.action=na.exclude,
-                  method = "forward", nvmax = 11)
+reg_model <- regsubsets(log(SalePrice) ~ ., data = d_exclude, 
+                        na.action=na.exclude, method = "forward", nvmax = 11)
 reg_sum <- summary(reg_model)
 
 reg_sum$which
@@ -582,7 +582,9 @@ To sum up, we started with intuition analysis, numerical variable, then categori
 
 # Train and test data
 
-The data are divided into 70% train data and 30% test data because there are 2930 observations, which are large enough for that ratio. From the scatter plots in the numerical analysis part, there are some outliers, which do not follow the trend in the Gr.Liv.Area and Total.Bsmt.SF. Thus, we remove them first before fitting the model because keeping them will make the errors become extremely high and there are only 3 outliers. 
+The data are divided into 70% train data and 30% test data because there are 2930 observations, which are large enough for that ratio. Moreover, we use function `createDataPartition()`, which helps to have more random split of the data.  
+
+From the scatter plots in the numerical analysis part, there are some outliers, which do not follow the trend in the Gr.Liv.Area and Total.Bsmt.SF. Thus, we remove them first before fitting the model because keeping them will make the errors become extremely high and there are only 3 outliers. 
 
 ```{r train-test}
 set.seed(12)
@@ -591,7 +593,7 @@ indices <- createDataPartition(d_house$SalePrice, p = 0.70, list = F)
 
 # Remove outliers from Gr.Liv.Area & Total.Bmst.SF & Garage.Cars
 d_house <- d_house %>%
-  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500 & Garage.Cars < 5)
+  filter(Gr.Liv.Area < 4500 & Total.Bsmt.SF < 4500)
 
 # Train data
 d_train <- d_house %>%
@@ -615,22 +617,22 @@ lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond +
                   MS.Zoning + Bldg.Type + Functional, 
                 data = d_train)
 # Predict the model 1 on test data
-pred_lm1_test <- predict(lm1_train, newdata = d_lm_test)
+pred_lm1_test <- predict(lm1_train, newdata = d_test)
 
 # R^2
-r_squared_lm1 <- cor(exp(pred_lm1_test), d_lm_test$SalePrice)^2
+r_squared_lm1 <- cor(exp(pred_lm1_test), d_test$SalePrice)^2
 # RMSE
 ## Way 1: manually
-sqrt(mean((exp(pred_lm1_test) - d_lm_test$SalePrice)^2))
+sqrt(mean((exp(pred_lm1_test) - d_test$SalePrice)^2))
 ## Way 2: by function
-accuracy(exp(pred_lm1_test), d_lm_test$SalePrice)
+accuracy(exp(pred_lm1_test), d_test$SalePrice)
 
 # more info about the model
 broom::glance(lm1_train)
 ```
 
 ```{r lm-model-2}
-# Simple model 
+# More simple model 
 lm2_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + Overall.Qual + 
                   MS.Zoning, data = d_train)
 # Predict the model 2 on test data
@@ -640,11 +642,11 @@ r_squared_lm2 <- cor(exp(pred_lm2_test), d_test$SalePrice)^2
 # RMSE
 accuracy(exp(pred_lm2_test), d_test$SalePrice)
 # more info about the model
-broom::glance(lm1_train)
+broom::glance(lm2_train)
 ```
 
 ```{r lm-model-3}
-# Model with 
+# Model  
 lm3_train <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning +
                       Overall.Qual + Bldg.Type + Year.Built + Foundation + 
                       Total.Bsmt.SF + House.Style + Garage.Cars + Sale.Condition,
@@ -661,7 +663,7 @@ broom::glance(lm3_train)
 ```
 
 ```{r lm-model-4}
-# Model based on stepwise variables
+# Model 
 lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +
                       Overall.Qual + Bldg.Type + Year.Built +
                       Garage.Cars + Sale.Condition,
@@ -693,8 +695,6 @@ accuracy(exp(pred_lm5_test), d_test$SalePrice)
 broom::glance(lm5_train)
 ```
 
-Linear model 5 appears as the best one. 
-
 ```{r lm-model-6}
 # Model with high correlated variables
 lm6_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built + 
@@ -710,7 +710,6 @@ accuracy(exp(pred_lm6_test), d_test$SalePrice)
 # more info about the model
 broom::glance(lm5_train)
 ```
-
 
 ```{r lm-model-7}
 # Model with variables appearing in several analysis
@@ -729,7 +728,7 @@ broom::glance(lm7_train)
 ```
 
 ```{r lm-model-8}
-# Model with variables appearing in several analysis
+# Model altered
 lm8_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built  + 
                   Garage.Cars + MS.Zoning + Bldg.Type + Functional, 
                 data = d_train)
@@ -744,9 +743,10 @@ broom::glance(lm8_train)
 ```
 
 ```{r lm-model-9}
-# Model with variables appearing in several analysis
-lm9_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built +
-                  Overall.Cond + MS.Zoning + Sale.Condition, 
+# Model altered
+lm9_train <- lm(log(SalePrice) ~ Lot.Area + Gr.Liv.Area + Overall.Qual + Year.Built +
+                  Overall.Cond + Bldg.Type + Fireplaces + Functional +
+                  Total.Bsmt.SF + Garage.Area, 
                 data = d_train)
 # Predict the model 2 on test data
 pred_lm9_test <- predict(lm9_train, newdata = d_test)
@@ -760,11 +760,263 @@ broom::glance(lm9_train)
 
 ## The final linear model
 
+After fitting several models above, the final model is as below. In this part, we first fit the model  
+
+```{r lm-final-model-all-data}
+# Fit the final model with the whole dataset
+lm_final <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
+                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
+                  MS.Zoning + Bldg.Type + Functional, 
+                data = d_house)
+# Predict the model 1 on test data
+summary(lm_final)
+
+# texreg::texreg(lm_final)
+# texreg::htmlreg(lm_final)
+```
+
+### Estimated coefficients
+
+Let’s look at the estimated regression coefficients.
+
+```{r coeff}
+# All coefficients
+coef(lm_final)
+
+## Interpreting the slope
+exp(lm_final$coefficients["(Intercept)"])
+
+## interpreting overall quality slope
+(exp(lm_final$coefficients["Overall.Qual"])-1)*100
+
+## building type "Duplex"
+(lm_final$coefficients["Bldg.TypeDuplex"])
+```
+
+Interpretation 
+
+* The intercept: When every predictors is zero, the house price is `r exp(lm_final$coefficients["(Intercept)"])` (extrapolation)
+* The slope of `Overall.Qual`: For every one-scale increase in the overall quality (assuming all other predictors remain constant), the house price increases by about `r (exp(lm_final$coefficients["Overall.Qual"])-1)*100`%.
+* Categorical variable `Bldg.Type`: Here, the  1Fam in the building type is used as the reference level. The `r lm_final$coefficients["Bldg.TypeDuplex"]` of Duplex is the difference of the intercept to 1Fam. 
+
+If we are interested in estimating the magnitude of an effect and its uncertainty, let's look at the confident intervals for the `lm_final` model.
+
+```{r lm-final-P-values–confidence-intervals}
+confint(lm_final)
+```
+
+This final model were chosen based on the lowest RMSE and the highest adjusted R squared from the previous part. Notably, the adjusted R-squared to compare the goodness-of-fit for regression models that contain differing numbers of independent variables. That's why we use this to evaluate the models. 
+
+### Prediction
+
+It's important to examine visually the prediction errors of the model. We present predicted value in the original unit of the house price by applying the function `exp()`. 
+
+```{r lm-final-prediction-plot}
+# Make predictions from the model, exponential back the value
+d_house_lm <- d_house %>% 
+  mutate(pred_lm = exp(predict(lm_final)))
+
+# Plot the predictions (on x axis) versus the house price
+ggplot(d_house_lm, aes(x = pred_lm, y = SalePrice)) + 
+  geom_point() + 
+  geom_abline() +
+  labs(title = "The actual Sale Price and the predicted Sale Price from linear model") +
+  my_theme_general
+
+# Calculate residuals
+d_house_lm$residuals <- d_house_lm$SalePrice - d_house_lm$pred_lm
+
+# Plot predictions (on x-axis) versus the residuals
+ggplot(d_house_lm, aes(x = pred_lm, y = residuals)) + 
+  geom_pointrange(aes(ymin = 0, ymax = residuals)) + 
+  geom_hline(yintercept = 0, linetype = 3) + 
+  ggtitle("Residuals vs. Linear Model prediction") +
+  my_theme_general
+```
+
+Now, we will also plot the gain curve of the lm_final's predictions against actual SalePrice. For situations where order is more important than exact values, the gain curve helps us check if the model's predictions sort in the same order as the true outcome. When the predictions sort in exactly the same order, the relative Gini coefficient is 1. When the model sorts poorly, the relative Gini coefficient is close to zero, or even negative.
+
+```{r lm-final-Gain-Curve}
+# Plot the Gain Curve
+WVPlots::GainCurvePlot(d_house_lm, "pred_lm", "SalePrice", "lm_final")
+```
+
+A relative gini coefficient of 0.96, $\approx$ 1, shows that the model correctly sorts high house price situations from lower ones.
+
+### Assessing model accuracy
+
+#### In-sample performance
+
+We start with “in-sample” performance, which means the accuracy measured on models fitted to all data available.
+
+```{r lm-final-insample-evaluation}
+# R squared of the final model
+glance_lm_final <- broom::glance(lm_final)
+glance_lm_final
+# RMSE of the final model
+accuracy(exp(predict(lm_final)), d_house$SalePrice)
+```
+
+Observations:
+
+* R-squared = `r glance_lm_final$r.squared`
+* Adjusted R-squared = `r glance_lm_final$adj.r.squared`
+
+The model explains 89% of the variance. Does this model is also better at making predictions on new observations that have not been used to train the model? Thus, we move to out-sample performance.
+
+#### Out-sample performance
+
+We now fit a part of the data to train the model and then test its predictive performance on a part of data that was splitted aside.
+
+```{r lm-final-out-sample}
+# Fit the model on the train data
+lm_final_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
+                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
+                    Bldg.Type + Functional, 
+                data = d_train)
+# Predict the final model on test data
+pred_lm_final_test <- predict(lm_final_train, newdata = d_test)
+
+# R^2
+r_squared_lm_final <- cor(exp(pred_lm_final_test), d_test$SalePrice)^2
+
+# RMSE
+accuracy_lm_final <- accuracy(exp(pred_lm_final_test), d_test$SalePrice)
+
+# The standard deviation of the outcome
+sd(d_house$SalePrice)
+```
+
+Observations:
+
+* R-squared out-sample = `r r_squared_lm_final`: even higher than R squared in-sample
+* RMSE = `r accuracy_lm_final[,"RMSE"]`: the standard deviation of the prediction errors is much smaller than the standard deviation of the house price (i.e., `r sd(d_house$SalePrice)` USD)
+* MAPE = `r accuracy_lm_final[,"MAPE"]`: on average, the model predicts with approximately 10% errors. 
+
+The cross-validation R-squared (measured on out-of-sample) is slightly higher than in-sample R-squared. The chosen linear model is therefore concluded as a good model because it does not overfit the data.   
+
+#### Cross-validation
+
+Previously, we fix the train and test data, does the result change if the data was split differently? To ensure about the model, we will make 3-way cross-validation as follows:
+
+![](cross_validation_illustration.png)
+
+```{r}
+library(vtreat)
+
+# Create a cross-validation plan with 3 folds (partitions)
+splitPlan <- kWayCrossValidation(nrow(d_train), 3, NULL, NULL)
+
+# First fold (A and B to train, C to test)
+split <- splitPlan[[1]]
+
+lm_final_cross1 <-lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
+                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
+                  MS.Zoning + Bldg.Type + Functional, 
+                  data = d_house[split$train, ,!colnames(train) %in% c("MS.Zoning")])
+
+df$pred.cv[split$app] <- predict(model, newdata = df[split$app,])
+
+# Remove some observations with very few cases in 2 variables MS.Zoning 
+# and Functional 
+d_house_lm <- d_house_lm %>%  
+  filter(!MS.Zoning %in% c("A (agr)", "I (all)"), 
+         !Functional %in% c("Sal", "Sev"))
+
+# Run the 3-fold cross validation plan from splitPlan
+k <- 3 # Number of folds
+d_house_lm$pred.cv <- 0 
+for(i in 1:k) {
+  
+  split <- splitPlan[[i]]
+  model <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
+                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars +
+                MS.Zoning + Bldg.Type + Functional, 
+              data = d_house_lm[split$train,])
+  d_house_lm$pred.cv[split$app] <- predict(model, 
+                                           newdata = d_house_lm[split$app, ])
+}
+
+# Predict from a full model
+d_house_lm$pred <- predict(lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + 
+                                Overall.Cond + Year.Built + Total.Bsmt.SF + 
+                                Fireplaces + Garage.Cars +
+                MS.Zoning + Bldg.Type + Functional, data = d_house_lm))
+
+# Get the rmse of the full model's predictions
+ModelMetrics::rmse(d_house_lm$pred, d_house_lm$SalePrice)
+
+# Get the rmse of the cross-validation predictions
+ModelMetrics::rmse(d_house_lm$pred.cv, d_house_lm$SalePrice)
+```
+
+# Generalised Linear Model with family set to Poisson
+
+## Model 1 
+
+The house price, our main response variable is a continuous variable. In this part, we will predict another variable which is integer: `Garage.Cars`: The number of cars that a garage can have. 
+
+We fit the model with these predictors: `Garage.Area`, `SalePrice` and `Land.Contour` (Flatness of the property with 4 levels: 1) Lvl: Near Flat/Level, 2) Bnk: Banked - Quick and significant rise from street grade to building, 3) HLS: Hillside - Significant slope from side to side, 4) Low: Depression)
+
+However, this is just an example to fit a poisson model based on our dataset. We are fully aware that the garage cars are not really count in the sense of Poisson distribution assumption. More particularly, the variances of the observations does not linearly increases with the mean value. For instance, the box plot below shows no big difference between groups of Land.Contour. Similarly, we tried to make box plot of `Garage.Cars` with many different categorical variables to investigate. The dataset only consists the car number from 0 to 5. A house commonly does not have 20 cars. Other potential count variables such as `Fireplaces` and `Full.Bath` have the same issue. Hence, we just fit a Poisson model to illustrate:
+
+```{r boxplot-cars-land-contour}
+# Boxplot of Garage.Cars with Land.Contour
+ggplot(data = d_house, mapping = aes(y = Garage.Cars, x = Land.Contour)) +
+  geom_hline(yintercept = 0) + ## to highlight the lower bound of the data
+  geom_boxplot() 
+```
+
+```{r glm-poisson}
+# Fit the poisson model to predict number of garage cars
+glm1_poisson <- glm(Garage.Cars ~ Garage.Area + SalePrice + Land.Contour, 
+                   family = "poisson", ## we specify the distribution!
+                   data = d_house)
+
+## summary Poisson model
+summary(glm1_poisson)
+
+## Coefficient: Land Coutour 
+exp(coef(glm1_poisson)["Land.ContourHLS"]) %>% round(digits = 2)
+
+## Coefficient: Garage.Area
+exp(coef(glm1_poisson)["Garage.Area"])
+
+exp(coef(glm1_poisson)["SalePrice"]*10000)
+```
+
+Interpretation of Coefficient of Land Coutour:
+
+R takes `Land.ContourBnk` (i.e., Banked - Quick and significant rise from street grade to building) as the reference. Hence, after applying exponential, the hillside (significant slope from side to side) land contour get, on average, 5% more garage cars than the banked land contour. 
+
+For a given home, increasing its number of Garage area by one square feet, would results in about 0.15% more cars
+For a given home, increasing its SalePrice by 10000 USD, would results in about 3% more cars
+
+
+```{r}
+# Fit the poisson model to predict number of garage cars
+glm1_poisson <- glm(Fireplaces ~ Garage.Area + SalePrice + Land.Contour, 
+                   family = "poisson", ## we specify the distribution!
+                   data = d_house)
+
+## summary Poisson model
+summary(glm1_poisson)
+
+## Coefficient: Land Coutour 
+exp(coef(glm1_poisson)["Land.ContourHLS"]) %>% round(digits = 2)
+
+## Coefficient: Garage.Area
+exp(coef(glm1_poisson)["Garage.Area"])
+
+
+exp(coef(glm1_poisson)["SalePrice"]*10000)
+
+d_house %>% count(Street)
+```
 
 
 
-
-
+# Generalised Linear Model with family set to Binomial
 
 
 
