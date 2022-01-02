@@ -901,21 +901,11 @@ Previously, we fix the train and test data, does the result change if the data w
 
 ![](cross_validation_illustration.png)
 
-```{r}
+```{r lm-cross-validation}
 library(vtreat)
 
 # Create a cross-validation plan with 3 folds (partitions)
 splitPlan <- kWayCrossValidation(nrow(d_train), 3, NULL, NULL)
-
-# First fold (A and B to train, C to test)
-split <- splitPlan[[1]]
-
-lm_final_cross1 <-lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
-                  Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
-                  MS.Zoning + Bldg.Type + Functional, 
-                  data = d_house[split$train, ,!colnames(train) %in% c("MS.Zoning")])
-
-df$pred.cv[split$app] <- predict(model, newdata = df[split$app,])
 
 # Remove some observations with very few cases in 2 variables MS.Zoning 
 # and Functional 
@@ -950,9 +940,9 @@ ModelMetrics::rmse(d_house_lm$pred, d_house_lm$SalePrice)
 ModelMetrics::rmse(d_house_lm$pred.cv, d_house_lm$SalePrice)
 ```
 
-# Generalised Linear Model with family set to Poisson
+# Generalised Linear Model (GLM) with family set to Poisson
 
-## Model 1 
+## Model 1: Predicting number of cars
 
 The house price, our main response variable is a continuous variable. In this part, we will predict another variable which is integer: `Garage.Cars`: The number of cars that a garage can have. 
 
@@ -967,7 +957,7 @@ ggplot(data = d_house, mapping = aes(y = Garage.Cars, x = Land.Contour)) +
   geom_boxplot() 
 ```
 
-```{r glm-poisson}
+```{r glm1-poisson}
 # Fit the poisson model to predict number of garage cars
 glm1_poisson <- glm(Garage.Cars ~ Garage.Area + SalePrice + Land.Contour, 
                    family = "poisson", ## we specify the distribution!
@@ -982,6 +972,7 @@ exp(coef(glm1_poisson)["Land.ContourHLS"]) %>% round(digits = 2)
 ## Coefficient: Garage.Area
 exp(coef(glm1_poisson)["Garage.Area"])
 
+## Coefficient: Sale Price
 exp(coef(glm1_poisson)["SalePrice"]*10000)
 ```
 
@@ -989,34 +980,133 @@ Interpretation of Coefficient of Land Coutour:
 
 R takes `Land.ContourBnk` (i.e., Banked - Quick and significant rise from street grade to building) as the reference. Hence, after applying exponential, the hillside (significant slope from side to side) land contour get, on average, 5% more garage cars than the banked land contour. 
 
-For a given home, increasing its number of Garage area by one square feet, would results in about 0.15% more cars
-For a given home, increasing its SalePrice by 10000 USD, would results in about 3% more cars
+For a given home, increasing its number of Garage area by one square feet, would results in about 0.15% more cars. For a given home, increasing its price by 10000 USD, would results in about 3% more cars.
 
+## Model 2: Predicting the house price
 
-```{r}
-# Fit the poisson model to predict number of garage cars
-glm1_poisson <- glm(Fireplaces ~ Garage.Area + SalePrice + Land.Contour, 
+```{r boxplot-price-building-type}
+# Boxplot of Garage.Cars with Land.Contour
+ggplot(data = d_house, mapping = aes(y = SalePrice, x = Bldg.Type)) +
+  geom_hline(yintercept = 0) + ## to highlight the lower bound of the data
+  geom_boxplot() 
+```
+
+```{r glm2-poisson}
+# Fit the poisson model to predict house price
+glm2_poisson <- glm(SalePrice ~ Gr.Liv.Area + Bldg.Type, 
                    family = "poisson", ## we specify the distribution!
                    data = d_house)
 
-## summary Poisson model
-summary(glm1_poisson)
+## summary Poisson model 2
+summary(glm2_poisson)
 
-## Coefficient: Land Coutour 
-exp(coef(glm1_poisson)["Land.ContourHLS"]) %>% round(digits = 2)
+## Coefficient: Building type duplex
+exp(coef(glm2_poisson)["Bldg.TypeDuplex"]) %>% round(digits = 2)
 
-## Coefficient: Garage.Area
-exp(coef(glm1_poisson)["Garage.Area"])
-
-
-exp(coef(glm1_poisson)["SalePrice"]*10000)
-
-d_house %>% count(Street)
+## Coefficient: Gr.Liv.Area
+exp(coef(glm2_poisson)["Gr.Liv.Area"])
 ```
 
+# Generalised Linear Model (GLM) with family set to Binomial
 
+## Model 1: Predicting groups of price per square feet
 
-# Generalised Linear Model with family set to Binomial
+In this part, we first calculate the house price per square feet by taking the `SalePrice` dividing by `LotArea`. To apply the binomial of GLM, two groups of price per square feet are created: upper and lower price. Afterward, we compute the ratio of upper price houses in the dataset based on their overall quality. Next, the GLM model is built on the rate of Price.Upper (number of successes) and Price.Lower (number of failures) to fulfill the binomial proportion.      
+
+```{r glm1-create-two-price-groups}
+# Create two groups of price according to the overall quality
+d_house_glm1 <- d_house %>% 
+  mutate(SalePrice.Per.SqrFeet = SalePrice / Lot.Area) %>% 
+  group_by(Overall.Qual) %>%
+  summarise(
+    ## Upper price
+    Price.Upper = sum(ifelse(SalePrice.Per.SqrFeet > mean(SalePrice.Per.SqrFeet), 1, 0)),
+    ## Lower price
+    Price.Lower = sum(ifelse(SalePrice.Per.SqrFeet <= mean(SalePrice.Per.SqrFeet), 1, 0)),
+    ## Rate of upper
+    Price.Upper.Rate = round(Price.Upper/(Price.Upper + Price.Lower), digits = 2))
+```
+
+```{r glm1-binomial-price-per-square-feet}
+glm1_binomial <- glm(cbind(Price.Upper, Price.Lower) ~ Overall.Qual,
+                    family = "binomial",
+                    data = d_house_glm1)
+
+summary(glm1_binomial)
+```
+
+After fitting the model, the overall quality seems not play a role in the price-per-square-feet groups. Indeed, its p-value is not significant. Also, the Overall.Qual slope is negative but we could not draw a conclusion since the variable is not significant in this case. However, we will still visualize the results of this model. The red dots are observed value and the predictions are a sequqnece of 100 observations that ranges from one to ten (black dots). 
+
+```{r plot-Effect-Overall-quality}
+# Plot Effect-Overall Quality
+new_data <- data.frame(Overall.Qual = seq(1, 10, length.out = 100))
+new_data$pred_price_upper_ratio <- predict(glm1_binomial, newdata = new_data,
+                                 type = "response")
+
+##
+ggplot(data = d_house_glm1,
+       mapping = aes(y = Price.Upper.Rate,
+                     x = Overall.Qual)) + 
+  ylim(0,1) +
+  geom_hline(yintercept = 0:1, col = "gray") +
+  ## predictions for conc 0 --> 10
+  geom_point(data = new_data,
+               mapping = aes(
+      y = pred_price_upper_ratio,
+      x = Overall.Qual)) +
+  ## actual observations
+  geom_point(col = "red", 
+             size = 3)
+```
+
+As expected, the model does not predict so well. 
+
+## Model 2: Predicting the central air
+
+After the first model, we now attempt to predict whether a central air is in the house. Recall that the center air variable consist of Yes/No. Here, the `Overall.Qual` will be used as the predictor. Before fitting the model, let's check the plot of reposnse and independent variables. 
+
+```{r glm2-central-air-plot}
+# Create Center Air: 1 for yes and 0 for no
+d_house_glm2 <- d_house %>% 
+  mutate(Central.Air.new = ifelse(Central.Air == "Y", 1, 0))
+
+# a logistic regression model and add the fit to the this graph
+ggplot(data = d_house_glm2, mapping = aes(y = Central.Air.new, x = Overall.Qual)) +
+  geom_point() +
+  geom_smooth(method = "glm", 
+              se = FALSE,
+              method.args = list(family = "binomial")) 
+```
+
+There are two only possible outcomes here as yes/no or success/failure (coded as 1 and 0 respectively). The higher overall quality seems to have central air but there are also some low quality observations with central air. Let's fit the model as belows: 
+
+```{r glm2-fitting}
+# Fitting model 2 to predict Central.Air
+glm2_binomial <- glm(Central.Air.new ~ Overall.Qual,
+                data = d_house_glm2,
+                family = "binomial")
+
+# Summary of the model
+summary(glm2_binomial)
+```
+
+The overall quality has a positive effect on the response variable. To interpret the coefficient of overall quality, we apply exponential function. When the overall quality increases by one level, the probability of having central air increases `r round(exp(coef(glm2_binomial)["Overall.Qual"]),1)` times. To evaluate the fitted values with the observed values (binary 0 or 1), it's important to discretize the fitted value into 0 and 1. At this stage, the cutoff of 0.5 is used.  
+
+```{r}
+# Discretise the fitted value into 0 and 1 with the cutoff of 0.5
+fitted_glm2_binomial <- ifelse(fitted(glm2_binomial) > 0.5,
+                               yes = 1, no = 0)
+
+# Make a data frame of observed and fitted values
+d_obs_fit_glm2 <- data.frame(obs = d_house_glm2$Central.Air.new,
+                             fitted = fitted_glm2_binomial)
+
+# summarise them into a table
+table(obs = d_obs_fit_glm2$obs,
+      fit = d_obs_fit_glm2$fitted)
+```
+
+To compare the observed and fitted values after discretizing, we summarize them in the confusion matrix above. 14 observations were correctly labeled to be No and 2726 observations were correctly labeled to be Yes. Nevertheless, 182 were wrongly classified by the model to be Yes but in reality, they are No (false positives). Besides, the model made mistakes of 3 observations as being No while they were not in reality (false negative). 
 
 
 
