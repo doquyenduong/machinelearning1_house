@@ -93,6 +93,9 @@ library(grid)
 library(leaps)                       # stepwise selection
 library(caret)                       # splitting train-test, SVM
 library(forecast)                    # calculate RMSE
+library(vtreat)                      # split plan for cross validation in lm
+library(mgcv)                        # GAM
+library(forecast)                    # GAM 
 
 # Set conflict preference
 conflict_prefer("filter", "dplyr")
@@ -329,7 +332,7 @@ egg::ggarrange(plotlist[[1]], plotlist[[2]],
                plotlist[[5]], plotlist[[6]], ncol=3, nrow = 2)
 ```
 
-In general, some plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`. 
+In general, some plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`. Next, we draw the the smooth trend line without parameter method = lm. 
 
 ```{r scatter-plots-version-2}
 # empty list for scatter plot
@@ -902,8 +905,6 @@ Previously, we fix the train and test data, does the result change if the data w
 ![](cross_validation_illustration.png)
 
 ```{r lm-cross-validation}
-library(vtreat)
-
 # Create a cross-validation plan with 3 folds (partitions)
 splitPlan <- kWayCrossValidation(nrow(d_train), 3, NULL, NULL)
 
@@ -939,6 +940,47 @@ ModelMetrics::rmse(d_house_lm$pred, d_house_lm$SalePrice)
 # Get the rmse of the cross-validation predictions
 ModelMetrics::rmse(d_house_lm$pred.cv, d_house_lm$SalePrice)
 ```
+
+# Generalised Additive Model (GAM)
+
+Not all predictors have a linear relationship with the response variable. In fact, there can be non-linear effects such as quadratic or polynomial or higher degree of complexity. Besides, whenever we build models, we tend to face a trade-off between flexibility and interpretability. General Additive Models (GAMs) provides us a middle ground between simple models such as linear regression, and complex machine learning models like support vector machine (SVM).
+
+However, we regularly have to model more advanced phenomena than can be represented by linear relationships. Machine learning models, e.g. neural networks or SVMs, can be very good at making predictions of complex relationships. The challenge with those Machine Learning models is that they tend to need lots of data which are quite difficult to interpret, and one can rarely make conclusions from the model results. 
+
+As mentioned above, GAMs offer a middle ground: they can be fit to complex, nonlinear relationships and make predictions, but it is easier to understand the underlying structure of our models and its predictions. During our research on GAMs, we found out that GAMs are primarily used on datasets with few variables. To create the models, we have chosen some more focus variables which were defined in the first section of this markdown. 
+
+```{r scatter-plots-version-2}
+# Variable of focus for the model
+d_select_2 <- d_house %>% 
+  select(SalePrice, Garage.Cars, Gr.Liv.Area, Overall.Qual, Total.Bsmt.SF, 
+         Year.Built, Fireplaces)
+
+# list of selected variables 
+l_vars_2 <- c("Garage.Cars",  "Gr.Liv.Area", "Overall.Qual", "Total.Bsmt.SF", 
+              "Year.Built", "Fireplaces")
+
+# empty list for scatter plot
+plotlist2 <- list()
+
+# For loop to get several scatter plots at once with not linear line
+for (idx in 1:length(l_vars_2)) {
+  this_var <- l_vars_2[idx]
+  p <- ggplot(d_select_2, aes_string(x = this_var, y = "SalePrice")) +
+    geom_point() +
+    geom_smooth()
+  plotlist2[[idx]] <- p
+} 
+
+# 6 scatter plots at once
+egg::ggarrange(plotlist2[[1]], plotlist2[[2]], 
+               plotlist2[[3]], plotlist2[[4]],
+               plotlist2[[5]], plotlist2[[6]], ncol=3, nrow = 2)
+```
+
+In this section, we fit 2 models on the train data and check the errors on the test data. Then, we will choose the best fitting model based on our results.
+
+Let's start with the first model. For consistency, we have chosen the variables which resulted from the variable analysis in the first section. We also had to define the basis dimension k, which allows for great flexibility in curve fitting. 
+
 
 # Generalised Linear Model (GLM) with family set to Poisson
 
@@ -978,7 +1020,7 @@ exp(coef(glm1_poisson)["SalePrice"]*10000)
 
 Interpretation of Coefficient of Land Coutour:
 
-R takes `Land.ContourBnk` (i.e., Banked - Quick and significant rise from street grade to building) as the reference. Hence, after applying exponential, the hillside (significant slope from side to side) land contour get, on average, 5% more garage cars than the banked land contour. 
+R takes `Land.ContourBnk` (i.e., Banked - Quick and significant rise from street grade to building) as the reference. Hence, after applying exponential, the hillside (significant slope from side to side) land contour get, on average, 5% more garage cars than the banked land contour.
 
 For a given home, increasing its number of Garage area by one square feet, would results in about 0.15% more cars. For a given home, increasing its price by 10000 USD, would results in about 3% more cars.
 
@@ -1107,6 +1149,7 @@ table(obs = d_obs_fit_glm2$obs,
 ```
 
 To compare the observed and fitted values after discretizing, we summarize them in the confusion matrix above. 14 observations were correctly labeled to be No and 2726 observations were correctly labeled to be Yes. Nevertheless, 182 were wrongly classified by the model to be Yes but in reality, they are No (false positives). Besides, the model made mistakes of 3 observations as being No while they were not in reality (false negative). 
+
 
 
 
