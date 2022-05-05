@@ -1,5 +1,5 @@
 ---
-title: "Ames Housing Project - Exploratory Analysis"
+title: "Ames Housing Project - Full Analysis"
 author: "Quyen Duong, Amin Jamali, Camille Nigon, Pascal Waser"
 date: "Last edited `r format(Sys.time(), '%d %B %Y')`"
 output: 
@@ -8,7 +8,7 @@ output:
     toc_float: 
       collapsed: false 
       smooth_scroll: false
-    toc_depth: 4
+    toc_depth: 5
     number_section: true 
 ---
 <style type="text/css">
@@ -24,6 +24,9 @@ pre {
 }
 td {  /* Table  */
   font-size: 12px;
+}
+.math {
+  font-size: 11px;
 }
 h1.title {
   font-size: 32px;
@@ -64,10 +67,10 @@ h3 { /* Header 3 */
 ```{r setup, include=FALSE}
 # Set the default mode for all the chunks
 knitr::opts_chunk$set(message = FALSE, warning = FALSE, fig.align = "center", 
-                      fig.height = 5, fig.width = 8)
+                      fig.height = 5, fig.width = 8, cache = TRUE)
 ```
 
-```{r load-packages, include = FALSE}
+```{r load-packages, include = FALSE, cache=FALSE}
 # Load packages
 library(dplyr)
 library(ggplot2)
@@ -105,9 +108,20 @@ library(neuralnet)                   # For Neural Network required
 conflict_prefer("filter", "dplyr")
 conflict_prefer("select", "dplyr")
 conflict_prefer("compute", "neuralnet")
+conflict_prefer("alpha", "scales")
 
 # Deactivate scientific notation
 # options(scipen = 999)
+```
+
+```{r setup-number, include=FALSE}
+# To set numeric as integer to be well formatted when knit the report
+inline_hook <- function(x) {
+  if (is.numeric(x)) {
+    format(x, digits = 2)
+  } else x
+}
+knitr::knit_hooks$set(inline = inline_hook)
 ```
 
 ```{r set-up-theme-for-ggplot, include = FALSE}
@@ -171,24 +185,23 @@ d_house <- d_house %>%
   select(-c(Order, PID))
 ```
 
-There are 82 variables and 2930 observations in the data set. As there are many variables, we first have to examine and make a intuition analysis on every variable and its relevance to the main variable ´SalePrice´. Although this process can be very time-consuming, it shed the light to grasp the data better. How did we do that? Below are the step explanation:
+
+There are 82 variables and 2930 observations in the data set. The description of each feature can be found under `Variables description` file. Because of many variables, we first examine and make a intuition analysis on every variable and its relevance to `SalePrice` for LM, GAM and NN. Although this process can be time-consuming, it sheds the light to grasp the data better. How did we do that? Below are the step explanation:
 
 * Reading and understanding every variable description
-* Make a new Excel with two columns: variable name and importance to sale price (Yes/No). The decision of Yes/No is grounded on intuition, expectation and some house-price related articles. To be more specific, we question these following questions: which factor matters when we buy a house? How important would this factor be? Does this factor appear in other variables?
+* Noting this information: variable name and importance to sale price (Yes/No). The decision of Yes/No is grounded on intuition, expectation and some house-price related articles. To be more specific, we question these following questions: which factor matters when we buy a house? How important would this factor be? Does this factor appear in other variables?
 
-The intuition-based Excel file can be found in the `variables_intuition_analysis.xlsx`. At the first glimpse, we marked these might-be-relevant features to the SalePrice: MS.Zoning, Lot.Area, Street, Lot.Shape, Neighborhood, Bldg.Type, House.Style, Overall.Qual, Year.Built, Foundation, Total.Bsmt.SF, TotRms.AbvGrd, Mo.Sold, Yr.Sold, Garage.Cars, Sale.Condition.
+At the first glimpse, we marked these might-be-relevant features to the SalePrice: MS.Zoning, Lot.Area, Street, Lot.Shape, Neighborhood, Bldg.Type, House.Style, Overall.Qual, Year.Built, Foundation, Total.Bsmt.SF, TotRms.AbvGrd, Mo.Sold, Yr.Sold, Garage.Cars, Sale.Condition. After considering of potential features, let's inspect the response variable in the next part. 
 
-After thinking of potential features, let's inspect the response variable in the next part. 
+## The response variable - Sale price 
 
-# The response variable - Sale price 
-
-The scope of this analysis is to predict the housing sales price based on appropriate features. First, we plot the histogram and box plot of the sale price (i.e. the dependent variable).
+One of the primary purposes of this analysis is to predict the housing sales price based on appropriate features. First, we plot the histogram and box plot of the sale price (i.e. the dependent variable).
 
 ```{r histogram-sales-price}
 # Histogram
 histogram_sale_price <- ggplot(d_house, mapping = aes(x = SalePrice)) +
-  geom_histogram(aes(y=..density..), color="black", fill = "grey") +
-  geom_density(alpha=.2, color ="blue") +
+  geom_histogram(aes(y =..density..), color="black", fill = "grey") +
+  geom_density(alpha =.2, color ="blue") +
   scale_x_continuous(labels = comma) +
   labs(title = "Histogram of sale price") +
   my_theme_general
@@ -210,7 +223,7 @@ stats_SalePrice <- psych::describe(d_house$SalePrice)
 
 The distribution of sale prices displays right-skewed with a long tail. The skew of `r stats_SalePrice$skew` confirms that the data are highly confirmed. Besides, the Kurtosis is `r stats_SalePrice$kurtosis`, i.e. Leptokurtic with a longer distribution and fatter tails. Some houses are very expensive. We have to carefully consider whether these expensive houses are outliers. Instead of dropping outliers, we apply the log transformation for sale prices. 
 
-From the beginning to this point, we just follow the intuition for variable selection. However, this method can be too subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.    
+From the beginning to this point, we just follow the intuition for variable selection. However, this method can be too subjective. Hence, a more objective and systematic way need to be executed as the section below. Nevertheless, we still consider our initial thoughts as a double-check criteria and critical thinking in supplement with the multivariate study.   
 
 # Numerical variable analysis
 
@@ -250,8 +263,6 @@ d_cor_SalePrice <- tibble(var_name = row.names(m_cor_SalePrice),
 d_cor_SalePrice 
 ```
 
-Both variables have long tails to the right and many outliers. 
-
 Remarkably, `Lot.Area`, the lot size in square feet is one of the variable we considered as important at the first sight but its correlation to the `SalePrice` is only 0.31. Let's look at the scatter plot of these two variables:
 
 ```{r scatter-SalePrice-Lot.Area}
@@ -271,9 +282,9 @@ egg::ggarrange(scatter_price_lot, scatter_price_lot2, ncol=2, nrow = 1)
 
 The two plots show the same information but the right scatter displays the removal of outliers. The `Lot.Area` data points stay mostly at the smaller value and their price varies vertically for the same lot space.
 
-## Top 10 variables correlated to SalePrice
+## Top variables correlated to SalePrice
 
-The top 10 numerical features with the absolute highest correlation with the `SalePrice` are now selected and we produce a SalePrice correlation matrix as below:  
+The top numerical features with the absolute highest correlation with the `SalePrice` are now selected and we produce a SalePrice correlation matrix as below:  
 
 ```{r top10-numerical-correlation}
 # Make df of top 10 numerical variables with the absolute highest correlation to SalePrice
@@ -339,7 +350,7 @@ egg::ggarrange(plotlist[[1]], plotlist[[2]],
 
 In general, some plots indicate that all of these variables have a linear positive relationship with the dependent variable `SalePrice`.
 
-# Missing value
+# Missing values
 
 It's important to inspect the missing values in each variable. How is the ratio of missing value in each feature? What does the missing value mean in each case? Are missing values random? These questions are vital when we deal with the missing value. Removing them immediately without reflecting can cause data size reduction and bias.
 
@@ -479,7 +490,7 @@ boxplot_theme(d_house$Foundation, title, variable)
 
 ### Functional
 
-The `Functional` variable consists of Brick & Tile, Cinder Block, Poured Contrete, Slab, Stone, Wood. The price seems to differ in different type of foundation but again, this can be a factor that was influenced by the `Year.Built`.
+The Functional variable comprises different categories such as major deduction 1, 2, minor deduction 1,2 etc. The price seems to differ in different type of functions, yet, it can be related to the overall quality variables.
 
 ```{r Functional}
 # Boxplot price in different house styles
@@ -605,7 +616,7 @@ lm1_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond +
                   Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars + 
                   MS.Zoning + Bldg.Type + Functional, 
                 data = d_train)
-# Predict the model 1 on test data
+# Predict the model on test data
 pred_lm1_test <- predict(lm1_train, newdata = d_test)
 
 # R^2
@@ -624,7 +635,7 @@ broom::glance(lm1_train)
 # More simple model 
 lm2_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Year.Built + Overall.Qual + 
                   MS.Zoning, data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm2_test <- predict(lm2_train, newdata = d_test)
 # R^2
 r_squared_lm2 <- cor(exp(pred_lm2_test), d_test$SalePrice)^2
@@ -641,7 +652,7 @@ lm3_train <- lm(log(SalePrice) ~ Gr.Liv.Area + MS.Zoning +
                       Total.Bsmt.SF + House.Style + Garage.Cars + Sale.Condition,
                 na.action=na.omit,
                 data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm3_test <- predict(lm3_train, newdata = d_test)
 # R^2
 r_squared_lm3 <- cor(exp(pred_lm3_test), d_test$SalePrice)^2
@@ -658,7 +669,7 @@ lm4_train <- lm(log(SalePrice) ~ Gr.Liv.Area +
                       Garage.Cars + Sale.Condition,
                 na.action=na.omit,
                 data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm4_test <- predict(lm4_train, newdata = d_test)
 # R^2
 r_squared_lm4 <- cor(exp(pred_lm4_test), d_test$SalePrice)^2
@@ -674,7 +685,7 @@ lm5_train <- lm(log(SalePrice) ~ Overall.Qual + Year.Built + Overall.Cond +
                   MS.Zoning + Bldg.Type + Sale.Condition, 
                 data = d_train)
 
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm5_test <- predict(lm5_train, newdata = d_test)
 # R^2
 r_squared_lm5 <- cor(exp(pred_lm5_test), d_test$SalePrice)^2
@@ -690,7 +701,7 @@ lm6_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built +
                   Full.Bath, 
                 data = d_train)
 
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm6_test <- predict(lm6_train, newdata = d_test)
 # R^2
 r_squared_lm6 <- cor(exp(pred_lm6_test), d_test$SalePrice)^2
@@ -706,7 +717,7 @@ lm7_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built +
                   Total.Bsmt.SF + Garage.Cars + MS.Zoning + Bldg.Type + 
                   Functional, 
                 data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm7_test <- predict(lm7_train, newdata = d_test)
 # R^2
 r_squared_lm7 <- cor(exp(pred_lm7_test), d_test$SalePrice)^2
@@ -721,7 +732,7 @@ broom::glance(lm7_train)
 lm8_train <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Year.Built  + 
                   Garage.Cars + MS.Zoning + Bldg.Type + Functional, 
                 data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm8_test <- predict(lm8_train, newdata = d_test)
 # R^2
 r_squared_lm8 <- cor(exp(pred_lm8_test), d_test$SalePrice)^2
@@ -737,7 +748,7 @@ lm9_train <- lm(log(SalePrice) ~ Lot.Area + Gr.Liv.Area + Overall.Qual + Year.Bu
                   Overall.Cond + Bldg.Type + Fireplaces + Functional +
                   Total.Bsmt.SF + Garage.Area, 
                 data = d_train)
-# Predict the model 2 on test data
+# Predict the model on test data
 pred_lm9_test <- predict(lm9_train, newdata = d_test)
 # R^2
 r_squared_lm9 <- cor(exp(pred_lm9_test), d_test$SalePrice)^2
@@ -891,20 +902,17 @@ Previously, we fix the train and test data, does the result change if the data w
 ![](cross_validation_illustration.png)
 
 ```{r lm-cross-validation}
-# Create a cross-validation plan with 3 folds (partitions)
-splitPlan <- kWayCrossValidation(nrow(d_train), 3, NULL, NULL)
-
-# Remove some observations with very few cases in 2 variables MS.Zoning 
-# and Functional 
+# Remove some observations with very few cases in 2 variables MS.Zoning and Functional 
 d_house_lm <- d_house_lm %>%  
   filter(!MS.Zoning %in% c("A (agr)", "I (all)"), 
          !Functional %in% c("Sal", "Sev"))
 
+# Create a cross-validation plan with 3 folds (partitions)
+splitPlan <- kWayCrossValidation(nrow(d_house_lm), 3, NULL, NULL)
 # Run the 3-fold cross validation plan from splitPlan
 k <- 3 # Number of folds
 d_house_lm$pred.cv <- 0 
 for(i in 1:k) {
-  
   split <- splitPlan[[i]]
   model <- lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + Overall.Cond + 
                   Year.Built + Total.Bsmt.SF + Fireplaces + Garage.Cars +
@@ -913,25 +921,23 @@ for(i in 1:k) {
   d_house_lm$pred.cv[split$app] <- predict(model, 
                                            newdata = d_house_lm[split$app, ])
 }
-
 # Predict from a full model
 d_house_lm$pred <- predict(lm(log(SalePrice) ~ Gr.Liv.Area + Overall.Qual + 
                                 Overall.Cond + Year.Built + Total.Bsmt.SF + 
-                                Fireplaces + Garage.Cars +
-                MS.Zoning + Bldg.Type + Functional, data = d_house_lm))
-
+                                Fireplaces + Garage.Cars + MS.Zoning + 
+                                Bldg.Type + Functional, data = d_house_lm))
 # Get the rmse of the full model's predictions
-ModelMetrics::rmse(d_house_lm$pred, d_house_lm$SalePrice)
+ModelMetrics::rmse(exp(d_house_lm$pred), d_house_lm$SalePrice)
 
 # Get the rmse of the cross-validation predictions
-ModelMetrics::rmse(d_house_lm$pred.cv, d_house_lm$SalePrice)
+ModelMetrics::rmse(exp(d_house_lm$pred.cv), d_house_lm$SalePrice)
 ```
 
-# Generalised Additive Model (GAM)
+## Generalised Additive Model 
 
-Not all predictors have a linear relationship with the response variable. In fact, there can be non-linear effects such as quadratic or polynomial or higher degree of complexity. Besides, whenever building models, we tend to face a trade-off between flexibility and interpretability. General Additive Models (GAMs) provides us a middle ground between simple models such as linear regression, and complex machine learning models like support vector machine (SVM).
+Not all predictors have a linear relationship with the response variable. In fact, there can be non-linear effects such as quadratic or polynomial or higher degree of complexity. Besides, whenever building models, we tend to face a trade-off between flexibility and interpretability. GAM provides us a middle ground between simple models such as linear regression, and complex machine learning models like SVM. GAM is an additive modeling method where the impact of the predictive variables is formulated through smooth functions depending on the underlying patterns in the data can be nonlinear (Goetz et al., 2015).
 
-However, we regularly have to model more advanced phenomena than can be represented by linear relationships. Machine learning models, e.g. neural networks or SVMs, can be very good at making predictions of complex relationships. The challenge with those Machine Learning models is that they tend to need lots of data which are quite difficult to interpret, and one can rarely make conclusions from the model results. 
+However, we regularly have to model more advanced phenomena than can be represented by linear relationships. Machine learning models, e.g. NN or SVM, can be very good at making predictions of complex relationships. The challenge with those Machine Learning models is that they tend to need lots of data which are quite difficult to interpret, and one can rarely make conclusions from the model results. 
 
 As mentioned above, GAMs offer a middle ground: they can be fit to complex, nonlinear relationships and make predictions, but it is easier to understand the underlying structure of our models and its predictions. To create the models, we have chosen some more focused variables which were defined in the chapter variable selection. First, let's look at the relationship of predictors to the dependent variables with smooth trend lines:
 
@@ -963,15 +969,13 @@ egg::ggarrange(plotlist2[[1]], plotlist2[[2]],
                plotlist2[[5]], plotlist2[[6]], ncol=3, nrow = 2)
 ```
 
-Different from the linear assumption, some variables have non-linear effect with the price from the graph above. In this section, we fit 2 models on the train data and check the errors on the test data. Then, we will choose the best fitting model based on our results.
+Different from the linear assumption, some variables have non-linear effect with the price. In this section, we fit two models on the train data and check the errors on the test data. Then, we choose the best fitting model based on our results.
 
-Let's start with the first model. For consistency, we have chosen the variables which resulted from the variable analysis in the first section. We also had to define the basis dimension k, which allows for great flexibility in curve fitting. 
+Let's start with the first model. For consistency, we have chosen the variables which resulted from the variable analysis in the EDA. We also have to define the basis dimension k, which allows for great flexibility in curve fitting. 
 
-## Model 1
+### Model 1
 
-### Fitting the model
-
-```{r gam-model-1}
+```{r gam-model-1, echo = TRUE, results = 'hide',  cache = TRUE}
 # Fitting model
 gam1_train <- gam(log(SalePrice) ~ s(Gr.Liv.Area, k=10)+ s(Overall.Qual, k=10) + 
                     s(Overall.Cond, k=9)+ s(Year.Built, k=10) + 
@@ -982,49 +986,45 @@ gam1_train <- gam(log(SalePrice) ~ s(Gr.Liv.Area, k=10)+ s(Overall.Qual, k=10) +
 summary(gam1_train)
 ```
 
-The deviance explained is 91.5% and the adjusted R-Square is 0.909. 
+The deviance explained is 91.1% and the adjusted R-Square is 0.909. 
 
-The summary output indicates a strong evidence that Gr.Liv.Area, Overall.Qual,  Overall.Cond, Year.Built, Total.Bsmt.SF, Fireplaces and Garage.Cars have effects on the response variable. Additionally, it indicates that the categorical variables Bldg.TypeDuplex, Bldg.TypeTwnhs, FunctionalMin1, FunctionalMin2, FunctionalMod, FunctionalSal , FunctionalSev and FunctionalTyp have an effect on the response variable.
+The summary output indicates a strong evidence that Gr.Liv.Area, Overall.Qual,  Overall.Cond, Year.Built, Total.Bsmt.SF, Fireplaces and Garage.Cars have effects on the response variable. Additionally, it implies that the categorical variables Bldg.TypeDuplex, Bldg.TypeTwnhs, FunctionalMin1, FunctionalMin2, FunctionalMod, FunctionalSal, FunctionalSev and FunctionalTyp have an effect on the response variable.
 
-The estimated degrees of freedom, edf in the output, quantify the complexity of the smooth function. If we look at the edf, it shows how complex the relationship between each predictor to the SalePrice. For the predictor Overall.Qual the edf is about 6.313. Let’s visualise the effect of this variable:
+The estimated degrees of freedom, edf in the output, quantify the complexity of the smooth function. If we look at the edf, it shows how complex the relationship between each predictor to the SalePrice. The predictor Overall.Qual's edf is about 6.313. Let’s visualise the effect of this variable:
 
-```{r gam-model-1-plot}
+```{r gam-model-1-plot, echo=FALSE, fig.height=4}
 plot(gam1_train, residuals=TRUE, select = 2)
 ```
 
-In this plot, the GAM fitted the model to the data points. This is different from linear regression, which only models linear relationships. On the other hand, the edf of Garage.Cars is almost one, meaning that this tern is considered to be a simple linear term. GAMs enables to fit a more flexible model. 
+In this plot, the GAM fitted the model to the data points. This is different from linear regression, which only models linear relationships. On the other hand, the edf of Garage.Cars is almost one, meaning that this term is considered to be a simple linear term. GAMs enables to fit a more flexible model. 
 
-### Assessing model accuracy
-
-We now predict on the test data and check the RMSE.
+We now predict on the test data and check the R-squared and RMSE.
 
 ```{r gam-model-1-predict}
 # Predict gam1 on the test data
 pred_gam1_test <- predict(gam1_train, newdata = d_test)
+# R squared
+cor(exp(pred_gam1_test), d_test$SalePrice)^2
 # Accuracy of the model
 gam1_accuracy <- accuracy(as.vector(exp(pred_gam1_test)), d_test$SalePrice)
 gam1_accuracy
 ```
 
-The RMSE is `r gam1_accuracy[,"RMSE"]`. 
+The out-sample R-squared is `r cor(exp(pred_gam1_test), d_test$SalePrice)^2` and RMSE is `r gam1_accuracy[,"RMSE"]`. 
 
 Let's use the function gam.check() to produce some diagnostic information about the fitting procedure and results: 
 
-```{r gam-model-1-gam.check}
+```{r gam-model-1-gam.check, results='hide',fig.keep='all', echo = FALSE}
 gam.check(gam1_train)
 ```
 
-In the first graph, there is the linear relationship between quantiles and residuals, which slightly deviates. Most of the residuals follow a normal distribution, however on the tails it more fat-tailed than normal distribution. In the second plot on top, we do not see any pattern from the residuals, they are scattered around 0. 
+In the first graph, there is the linear relationship between quantiles and residuals, which slightly deviates. Most of the residuals follow a normal distribution, however on the tails it more fat-tailed than normal distribution. In the second plot on top, we do not see a clear pattern from the residuals, they are scattered around 0. 
 
-## Model 2
+### Model 2
 
-### Fitting the model
+In our second model, we add some interactions within the variables with the function `te()`. `te()` terms are the smooth equivalent of main effects + interactions. Additionally, we can also specify a GAM formula that will fit different smooths for different categorical variables, as known as factor-smooth interaction. By specifying the "by" argument to the `s()` function, R will calculate a different smooth for each unique category. During the realization of this model, several interactions were tried between variables and the following model was the most successful:  
 
-In our second model, we add some interactions within the variables with the function `te()`. `te()` terms are the smooth equivalent of main effects + interactions. Additionally, we can also specify a GAM formula that will fit different smooths for different categorical variables, as known as factor-smooth interaction. By specifying the "by" argument to the `s()` function, R will calculate a different smooth for each unique category. 
-
-During the realization of this model, several interactions were tried between variables and the following model was the most successful:  
-
-```{r gam-model-2}
+```{r gam-model-2, echo = TRUE, results = 'hide', cache = TRUE}
 # Fitting model gam 2
 gam2_train <- gam(log(SalePrice) ~ te(Gr.Liv.Area, Overall.Qual, k=10) + 
                     s(Year.Built, k=20) +  s(Overall.Cond, k=9, by=MS.Zoning) + 
@@ -1035,33 +1035,38 @@ gam2_train <- gam(log(SalePrice) ~ te(Gr.Liv.Area, Overall.Qual, k=10) +
 summary(gam2_train)
 ```
 
-The deviance explained is 92% and the adjusted R-Square is 0.917. This number is slightly higher than our first model. 
-
-### Assessing model accuracy
-
+The deviance explained is 91.9% and the adjusted R-Square is 0.916. This number is slightly higher than our first model. 
 We now predict our data on the test data: 
 
 ```{r gam-model-2-predict}
 # Predict gam 2 on the test data
 pred_gam2_test <- predict(gam2_train, newdata = d_test)
+# R squared
+cor(exp(pred_gam2_test), d_test$SalePrice)^2
 # Accuracy of the model
 gam2_accuracy <- accuracy(as.vector(exp(pred_gam2_test)), d_test$SalePrice)
-gam2_accuracy[, "RMSE"]
+gam2_accuracy
 ```
 
-The RMSE is `r gam2_accuracy[, "RMSE"]`. This is slightly lower than our previous model which had a RMSE of `r gam1_accuracy[, "RMSE"]`. Let's now check our model with the gam.check() function:
+Here is the brief observations regarding to the two models accuracy:
 
-```{r gam-model-2-gam.check}
+- Adjusted R-squared of the model: model 1 < model 2
+- R-squared of the out-sample: model 1 (0.911) > model 2 (0.907)
+- RMSE of the out-sample: model 1 (`r gam1_accuracy[, "RMSE"]`) < model 2 (`r gam2_accuracy[, "RMSE"]`)
+
+Let's now check our model with the gam.check() function:
+
+```{r gam-model-2-gam.check, results='hide',fig.keep='all', echo = FALSE}
 gam.check(gam2_train)
 ```
 
-In the first plot, there is the linear relationship between quantiles and residuals, which slightly deviates. Most of the residuals follow a normal distribution, however on the tails it more fat-tailed than normal distribution. 
+Similarly, we do not find any obvious patterns in the residual plots for the model 2.  
 
-Generally, we can assume that the model is good, however some outliers can't be explained with it. In the second plot, we don't see any pattern from the residuals, they are scattered around 0. In conclusion, the second model is slightly better, because the lower RMSE and explained deviance. 
+Generally, we can assume that the model is good, however, some outliers cannot be explained with it and the residuals of both models have fat tails. In conclusion, the first model is slightly better and therefore selected, because its lower RMSE and higher R-squared of the out-sample.
 
-# Generalised Linear Model (GLM) with family set to Poisson
+# Generalised Linear Model with family set to Poisson
 
-## Model 1: Predicting number of cars
+## Predicting number of cars
 
 The house price, our main response variable is a continuous variable. In this part, we will predict another variable which is integer: `Garage.Cars`: The number of cars that a garage can have. 
 
@@ -1101,7 +1106,7 @@ R takes `Land.ContourBnk` (i.e., Banked - Quick and significant rise from street
 
 For a given home, increasing its number of Garage area by one square feet, would results in about 0.15% more cars. For a given home, increasing its price by 10000 USD, would results in about 3% more cars.
 
-## Model 2: Predicting number of rooms above ground
+## Predicting number of rooms 
 
 The house price, our main response variable is a continuous variable. In this part, we will predict another variable which is integer: `TotRms.AbvGrd`: The number of rooms above ground. 
 
@@ -1168,9 +1173,9 @@ As the Poisson Models shows a dispersion parameter of 1. This information in the
 
 The quasipoisson model shows dispersion parameter is between 0.22. Therefore, the variance decrease slower then the mean value. We are therefore speaking about underdispersed data.
 
-# Generalised Linear Model (GLM) with family set to Binomial
+# Generalised Linear Model with family set to Binomial
 
-## Model 1: Predicting groups of price per square feet
+## Predicting groups of price per square feet
 
 In this part, we first calculate the house price per square feet by taking the `SalePrice` dividing by `LotArea`. To apply the binomial of GLM, two groups of price per square feet are created: upper and lower price. Afterward, we compute the ratio of upper price houses in the dataset based on their overall quality. Next, the GLM model is built on the rate of Price.Upper (number of successes) and Price.Lower (number of failures) to fulfill the binomial proportion.      
 
@@ -1222,7 +1227,7 @@ ggplot(data = d_house_glm1,
 
 As expected, the model does not predict so well. 
 
-## Model 2: Predicting the central air
+## Predicting the central air
 
 After the first model, we now attempt to predict whether a central air is in the house. Recall that the center air variable consist of Yes/No. Here, the `Overall.Qual` will be used as the predictor. Before fitting the model, let's check the plot of reposnse and independent variables. 
 
@@ -1269,7 +1274,7 @@ table(obs = d_obs_fit_glm2$obs,
 
 To compare the observed and fitted values after discretizing, we summarize them in the confusion matrix above. 14 observations were correctly labeled to be No and 2726 observations were correctly labeled to be Yes. Nevertheless, 182 were wrongly classified by the model to be Yes but in reality, they are No (false positives). Besides, the model made mistakes of 3 observations as being No while they were not in reality (false negative). 
 
-# Support Vector Machines (SVM)
+# Support Vector Machines 
 
 SVM are supervised learning models and widely used for classification problems. Therefore, we predict the types of building in this chapter to apply this model. As we have 5 different categories, we combined 2fmCon (Two-family Conversion; originally built as one-family dwelling) and 1Fam (Single-family Detached). The reason is that 2fmCon was build as an one-family dwelling. Additionally, we combine TwnhsE (Townhouse End Unit) with Twnhs (Townhouse Inside Unit) because they are both "town house". 
 
@@ -1380,9 +1385,10 @@ egg::ggarrange(plot_1, plot_2, plot_3, plot_4, ncol=2, nrow = 2)
 
 With the selected predictors, we can perform a support vector machine with the kernel: Linear, Radial, Polynomial and Sigmoid. However, after fitting many models, Linear could not predict the Duplex Type, our analysis shows mainly on Radial as the best result has been seen with this kernel. 
 
-So as a first step, we identified the best cost for the the kernel Radial, which is 10. 
+So as a first step, we identified the best cost for the the kernel Radial, which is 100.
 
-```{r SVM-Tune-cost-using-caret, message=FALSE, warning=FALSE}
+```{r SVM-Tune-cost-using-caret, cache=TRUE, echo=FALSE}
+set.seed(12)
 tune.out <- tune(
   svm, Bldg.Type ~ Lot.Area + Overall.Qual + Year.Built + TotRms.AbvGrd + Garage.Area,
   data = d_train_svm,
@@ -1393,11 +1399,12 @@ tune.out <- tune(
 tune.out$best.model
 ```
 
-Therefore, we trained a model with the all the determinded predictors and with the optimal cost for radial. 
+Therefore, we trained a model with the all the determined predictors and with the optimal cost for radial.
 
-```{r SVM-Train-Model}
+```{r SVM-Train-Model, cache=TRUE}
+set.seed(12)
 svm_radial_train <- svm(Bldg.Type ~ ., d_train_svm, kernel = "radial", 
-                        scale = TRUE, cost = 10)
+                        scale = TRUE, cost = 100)
 ```
 
 To inspect, how our model performs on a plot, we noted that due to the high amount of Familicomplex, we were not able to see a clear split on a two dimensional plot. 
@@ -1443,7 +1450,7 @@ Although, accuracy is 0.95, Duplex only could be correctly predicted 57% as seen
 
 To validate our model, we performed three different cross validation model with the method svmLinear, svmRadial.
 
-```{r SVM-Cross-Validation, message=FALSE, warning=FALSE, paged.print=FALSE}
+```{r SVM-Cross-Validation, message=FALSE, warning=FALSE, paged.print=FALSE, cache=TRUE}
 # Model
 trctrl <- trainControl(method = "repeatedcv", number = 5, repeats = 5)
 svm_linear <- train(Bldg.Type ~ ., data = d_train_svm, method = "svmLinear", 
@@ -1456,25 +1463,33 @@ svm_radial <- train(Bldg.Type ~ ., data = d_train_svm, method = "svmRadial",
                     tuneLength = 5)
 ```
 
-```{r SVM-Cross-Validation-Linear, message=FALSE, warning=FALSE, paged.print=FALSE}
+The confusion of matrix of the SVM with kernel linear is as follows:
+
+```{r SVM-Cross-Validation-Linear, message=FALSE, warning=FALSE, paged.print=FALSE, echo=FALSE}
 # Apply to the test data
 test_pred_linear <- predict(svm_linear, newdata = d_test_svm)
-confusionMatrix(test_pred_linear, d_test_svm_truth)
+conf_ma_svm_li <- confusionMatrix(test_pred_linear, d_test_svm_truth)
+conf_ma_svm_li$table
+conf_ma_svm_li$overall[1:2]
 ```
 
-As seen before and already discussed, with the linear model, the differentiation between Duplex and Familycomplex is not recognized.
+As seen before and already discussed, with the linear model, the differentiation between Duplex and Familycomplex is not recognized. Next, we examine the results of the SVM with kernel radial:
 
-```{r SVM-Cross-Validation-Radial, message=FALSE, warning=FALSE}
+```{r SVM-Cross-Validation-Radial, message=FALSE, warning=FALSE, echo=FALSE}
 # Apply to the test data
 test_pred_radial <- predict(svm_radial, newdata = d_test_svm)
-confusionMatrix(test_pred_radial, d_test_svm_truth)
+conf_ma_svm_ra <- confusionMatrix(test_pred_radial, d_test_svm_truth)
+conf_ma_svm_ra$table
+conf_ma_svm_ra$overall[1:2]
 ```
 
-With the cross validation model, we were able to fit a model with an accuracy of 0.95. Which, is only minimal better then our trained model. However, the sensitivity for the building type Duplex is in this case worse.
+With the cross validation model, we were able to fit a model with an accuracy of 0.95. Which, is only minimal better than our trained model. However, the sensitivity for the building type Duplex is in this case worse.
 
 # Neural Network
 
-## Scaling train and test data 
+## Neural Network for regression
+
+### Scaling train and test data 
 
 The main purpose of this chapter is to predict `SalePrice` with neural network. For using the neural Network to calculate a continuous output, we created used the same 70% as train data and 30% test data and removed all columns and removed all NA values to ensure proper application of neuralnet.
 
@@ -1532,11 +1547,11 @@ boxplot(d_train_numeric_scaled$SalePrice, d_test_numeric_scaled$SalePrice, d_hou
         names = c("Training", "Testing", "Full Data"))
 ```
 
-## Fitting several models - Neural Network
+### Fitting models
 
 We fitting several neural network models with the train data. We fit 5 different models with the different of 3 and 5 hidden layers. However, because each neural network model takes a long time to run, we only present three models with the least errors here. For the first model, all numerical variables will be the predictors. Afterwards, the high correlated variables to SalePrice are used as predictors in this chapter. 
 
-```{r NN-fitting-several-models}
+```{r NN-fitting-several-models, cache = TRUE}
 # Fit NN 1 with all variables
 nn1_train <- neuralnet(SalePrice ~ .,data = d_train_numeric_scaled, hidden = 3, 
                        linear.output = TRUE)
@@ -1558,7 +1573,7 @@ nn3_train <- neuralnet(SalePrice ~ Overall.Qual + Gr.Liv.Area + Garage.Cars +
 plot(nn3_train)
 ```
 
-## Assessing model accuracy
+### Assessing model accuracy
 
 ```{r NN-prediction}
 # Prediction NN 1
@@ -1612,45 +1627,288 @@ egg::ggarrange(compare_nn_theme(pred_nn1, 1),
                nrow = 3)
 ```
 
-Based on the plot above, model 1 has the lowest RMSE and highest R squared. Therefore, model 1 is our final model for this section to predict SalePrice. 
+Based on the plot above, model 1 has the lowest RMSE and highest R squared. Therefore, model 1 is our final model for this section to predict SalePrice. It took very long to run the cross validation for the NN; we do not present this part in the report.
 
-## Cross-validation - Neural Network
+## Neural Network for classification
 
-To validate our model, we performed k-fold Cross Validation to ensure that we were not just lucky with our train and test data. Additionally, we used hyperparameter tuning to improve the model.
+### Scaling train and test data
 
-```{r Neural-Network-Cross-Validation}
-# set.seed(12)
-# start.time <- Sys.time()
-# tuGrid <- expand.grid(.layer1=c(1:4), .layer2=c(0,2), .layer3=c(0))
-# 
-# 
-# trCtrl <- trainControl(
-#   method = 'repeatedcv', 
-#   number = 5, 
-#   repeats = 1, 
-#   returnResamp = 'final')
-# 
-# models <- train(
-#   x = d_house_numeric_nn %>% select(-SalePrice),
-#   y = d_house_numeric_nn %>% pull(SalePrice),
-#   method = 'neuralnet', metric = 'RMSE', 
-#   linear.output = TRUE,
-#   preProcess = c('center', 'scale'),
-#   tuneGrid = tuGrid,
-#   trControl = trCtrl)
-# 
-# end.time <- Sys.time()
-# time.taken <- end.time - start.time
-# time.taken
+The scaled data should not include any NA Values. Therefore, we created a numeric data frame, which excluded predictors with many NA Values or such, which can not be scaled. Afterwards, Lot.Area was log transformed before the numeric data frame was scaled. As the goal is to predict categorical values, the same categorical values are used as in the SVM model. Afterwards, we use the same indices, which was in the prior splitting of our data set, before removing all NA values.
+
+```{r train-test-NN-classfication}
+d_house_numeric_2 <- d_house %>% 
+  select(where(is.numeric)) %>%
+  select(-c(Lot.Frontage, Garage.Yr.Blt, Mas.Vnr.Area, 
+            Bsmt.Full.Bath, Bsmt.Half.Bath, MS.SubClass))
+
+d_house_numeric_2$Lot.Area <- log(d_house_numeric_2$Lot.Area)
+
+d_max <- apply(d_house_numeric_2, 2, max)
+d_min <- apply(d_house_numeric_2, 2, min)
+d_nn_scaled <- as.data.frame(scale(d_house_numeric_2, 
+                                   center = d_min, scale = d_max - d_min))
+
+d_nn <- d_nn_scaled
+d_nn$bldg.Type <- d_house$Bldg.Type
+
+# Creating Character for Renaming
+d_nn$bldg.Type <- as.character(d_nn$bldg.Type)
+
+# Grouping the building types into 3 main categories
+d_nn$bldg.Type[d_nn$bldg.Type == "1Fam"] <- "Familycom"
+d_nn$bldg.Type[d_nn$bldg.Type == "2fmCon"] <- "Familycom"
+d_nn$bldg.Type[d_nn$bldg.Type == "Duplex"] <- "Duplex"
+d_nn$bldg.Type[d_nn$bldg.Type == "Twnhs"] <- "Townhouse"
+d_nn$bldg.Type[d_nn$bldg.Type == "TwnhsE"] <- "Townhouse"
+
+# Returning Factor for building type
+d_nn$bldg.Type <- as.factor(d_nn$bldg.Type)
+
+# Train data
+d_train_nn <- d_nn %>%
+  slice(indices) %>% 
+  na.omit() 
+
+# Test data
+d_test_nn <- d_nn %>%
+  slice(-indices) %>% 
+  na.omit() %>%
+  select(-bldg.Type)
+
+d_test_nn_truth <- d_nn %>%
+  slice(-indices) %>% 
+  na.omit() %>%
+  pull(bldg.Type)
 ```
 
-```{r Neural-Network-Plot-Cross-Validation}
-# plot(models)
+### Fitting models 
+
+We fit the Neural Network with the same five numerical values, which are in the SVM model, to identify the difference between those two fitting models. Two hidden layers are set for this model.
+
+```{r Neural-Network-Categorial-Models, cache = TRUE}
+start.time <- Sys.time()
+set.seed(12)
+nn_bldg_train <- neuralnet(bldg.Type ~ Lot.Area + Overall.Qual + Year.Built + 
+                             TotRms.AbvGrd + Garage.Area, data = d_train_nn, 
+                           hidden = c(4, 4), stepmax = 1e+07, rep = 1)
+
+end.time <- Sys.time()
+time.taken <- end.time
 ```
 
-and extract the best model
+Below we see the resulting network including the weights.
 
-```{r Neural-Network-Plot-Neural-Network}
-# plot(models$finalModel)
+```{r Neural-Network-Categorial-Plot-Network}
+#plot(nn_bldg_train)
 ```
+
+```{r Neural-Network-Categorial-Rescale, cache=TRUE}
+test_results <- neuralnet::compute(nn_bldg_train, d_test_nn)
+
+pred_bldg_nn <- test_results$net.result
+```
+
+### Assessing model accuracy
+
+After resealing we predicted the model and identified an Accuracy of 0.95.
+
+```{r Neural-Network-Categorial-Predict-test-set}
+pred_nn_test <- apply(pred_bldg_nn, 1, which.max)
+test_pred_nn <- factor(levels(d_test_nn_truth)[pred_nn_test], 
+                       levels = levels(d_test_nn_truth))
+```
+
+```{r Neural-Network-Categorial-Inspect-ConfusionMatrix}
+conf_matrix <- confusionMatrix(d_test_nn_truth, test_pred_nn)
+conf_matrix
+```
+
+### Optimize Network Structure
+
+First, we need to remodel the data due to some limitations of `caret`. And have a look at the different models. We performed a tuning of the hidden layers for the model. 
+
+```{r Neural-Network-Categorial-Optimize}
+xor <- model.matrix(~ bldg.Type, na.omit(d_nn))
+xor[,1] <- ifelse(xor[,2] %in% 0 & xor[,3] %in% 0, 1, 0)
+colnames(xor)[1] <- 'bldg.TypeDuplex'
+
+nn_mod <- cbind(xor, d_nn %>% select(-bldg.Type))
+train_mod <- nn_mod %>% slice(indices)
+```
+
+```{r Neural-Network-Categorial-Layer-Tuning}
+start.time <- Sys.time()
+set.seed(12)
+formula = bldg.TypeDuplex + bldg.TypeFamilycom + bldg.TypeTownhouse ~ Lot.Area + 
+  Overall.Qual + Year.Built + TotRms.AbvGrd + Garage.Area
+models <- train(formula, train_mod,
+                method="neuralnet",
+                ### Parameters for layers
+                tuneGrid = expand.grid(.layer1=c(2:4), .layer2=c(0:4), .layer3=c(0)),
+                ### Parameters for optmisation
+                learningrate = 0.01,
+                threshold = 0.001,
+                stepmax = 1e+07)
+end.time <- Sys.time()
+time.taken <- end.time - start.time
+time.taken
+
+plot(models)
+```
+
+# Optimization version 1
+
+After analyzing the data set with the sale price and the building type, let’s move to the optimization chapter. As an investment firm, we plan to buy then renovate several dwellings and sell them afterward. First, it is important to identify whether buying and renovating different buildings can sell them to the market with a certain margin. On average, the profit margin for a Duplex house is 100,000 USD, a Townhouse is 50000 USD, and a Family complex is 15,000 USD (based on our market insights and experience).
+
+The profit from this project cannot be reinvested. Therefore, the profit goes directly to our investors. We assume that all  have the same price and that the capital is sufficient for buying 120 houses. The internal guidelines demand to buy each building as a whole. Therefore, buying part of a building is not an option. A portfolio constraint is that Townhouses cannot exceed 10% of all buildings. Duplex is the most profitable building type. However, it is only possible to buy them from the largest real estate agency. Therefore, they require us for each Duplex to buy at least 4 Family complex houses.
+
+With our optimization, the main question now is how many building types we can buy each to maximize the profit.
+
+First and foremost, let's define the number of each building type as follows: 
+
+* D = number of Duplex 
+* T = number of Townhouse
+* F = number of Family complex
+
+*objective*
+$$ maximize profit = 100000 \times D + 50000 \times T+ 15000 \times F $$
+
+*constraints*
+$$ D \ge 0\\
+T \ge 0\\
+F \ge 0\\
+D + T + F \le 120\\
+F \ge 4D\\
+D + F \ge 10T $$
+
+```{r optimisation-scenario, cache=TRUE}
+# setting the coefficients of the objective function
+objective <- c(100000,#Duplex Complex
+               50000, #Townhouse Complex
+               15000) #Margin Family Complex
+
+# setting the constraints 
+A <- matrix(c(1, 0, 0,   #Duplex cannot be negative
+              0, 1, 0,   #Townhouse cannot be negative
+              0, 0, 1,   #Familycomplex cannot be negative
+              1, 1, 1,   #Sum of all buildings cannot be bigger then 120
+              -4, 0, 1,  #For each Duplex, we need to buy 4 Family complex
+              1, -9, 1), #Townhouse cannot be more then 10%
+              nrow=6, byrow=TRUE) 	       
+B <- c(0,0,0,120,0,0)			                    # constraint rhs		
+dir  <- c(">=", ">=", ">=", "<=", ">=", ">=")	# direction of inequality
+
+# we make sure the number of paintings are integers!
+optimum <-  lp(direction="max",  objective, A, dir,  B, all.int = TRUE)
+```
+
+```{r print-optimization, echo=FALSE}
+cat("To maximize our margin, we need to buy and renovate", optimum$solution[1], "Duplex buildings,", optimum$solution[2],  "Townhouses and", optimum$solution[3], "Family complexes. With this combination our margins is amounting,", optimum$objval, "USD.")
+```
+
+Our margin for our investors is 4'020'000 USD. We noted that we only buy 10 Townhouses. The maximal allowed amount would be 12. However as the Duplex is more profitable we purchased 22 of them, which is for times more then the Family complex. Therefore all our constraints were fulfilled.
+
+# Optimization version 2
+
+In the last part of our work, we create three fictive optimization problems and solve it using R.
+
+## Problem 1
+
+A street painting artist is being commissioned to create wall paintings in a very large street art exhibition project. He can create as many painting as he would like to. His time, however, is limited to a total of 500 hours. The curator of the project has specified two options for the painting material qualities: $S$ = painting of material quality “superior”, and $P$ = painting of material quality ”premium”. These generate the artist a profit of 240 and 160 CHF per painting, respectively. The artist has 1350 paint sprays available for his entire project. The superior painting quality $S$ requires 20 sprays while premium painting $P$ requires 10 sprays. The painting time is 6 and 5 hours, for creating one painting of quality $S$ or $P$, respectively. 
+
+The artist wonders about the optimal number of painting of each quality type such that his profit is maximized. <br>
+
+* $S$ = number of painting with "superior" material quality
+* $P$ = number of painting with "premium" material quality
+
+
+The optimization problem can be formulated as follows:
+
+**objective**
+
+$$ maximize [profit = (240S) + (160P)] $$ 
+
+**constraints** 
+
+$$ 20S + 10P <= 1350$$ 
+$$ 6S + 5P <= 500 $$ 
+
+The optimization in R is as follows:
+
+```{r optimisation-scenario-1, cache=TRUE}
+# setting the coefficients of the objective function
+objective <- c(240, 160)
+# setting the constraints 
+A <- matrix(c(20, 10, 6, 5, 1, 0, 0, 1),
+            nrow=4, byrow=TRUE) 	        # constraint coefficients
+b <- c(1660, 500, 0, 0)			              # constraint rhs		
+dir  <- c("<=", "<=", ">=", ">=")		      # direction of inequality
+# we make sure the number of paintings are integers!
+optimum <-  lp(direction="max",  objective, A, dir,  b, all.int = TRUE)
+cat("The maximum profit is", optimum$objval, "\n")
+cat("The optimal number of paintings are (S,P) = (",optimum$solution,")")
+```
+
+The artist should make 44 paintings with material of superior quality and 47 paintings with paint of premium quality. He will be able to generate 18080 CHF for his work, which he can accomplish in $44 \times 6 + 47 \times 5 = 499 \ hours$.
+
+## Problem 2 
+
+Now we assume, that the artist is required to create at least 50 painting with the superior material quality, and he has access to 1550 spray. Let us see how these change the situation:
+
+```{r optimisation-scenario-2, cache=TRUE}
+# setting the coefficients of the objective function
+objective <- c(240, 160)
+# setting the constraints 
+A <- matrix(c(20, 10, 6, 5, 1, 0, 0, 1),
+            nrow=4, byrow=TRUE) 	        # constraint coefficients
+b <- c(1550, 500, 50, 0)			            # constraint rhs		
+dir  <- c("<=", "<=", ">=", ">=")		      # direction of inequality
+# we make sure the number of paintings are integers!
+optimum <-  lp(direction="max",  objective, A, dir,  b, all.int = TRUE)
+cat("The maximum profit is", optimum$objval, "\n")
+cat("The optimal number of paintings are (S,P) = (",optimum$solution,")")
+```
+
+In the second scenario, the artist should make 69 paintings with material of superior quality and only 17 paintings with paint of premium quality. He will be able to generate more profit, in this case 19280 CHF for his work, for which he needs again $69 \times 6 + 17 \times 5 = 499 \ hours$. 
+
+## Problem 3 
+
+Had the artist have 1660 sprays, it would be optimal if he would have painted all his work with the superior quality. This can be seen as follows:
+
+```{r optimisation-scenario-3, cache=TRUE}
+# setting the coefficients of the objective function
+objective <- c(240, 160)
+# setting the constraints 
+A <- matrix(c(20, 10, 6, 5, 1, 0, 0, 1),
+            nrow=4, byrow=TRUE) 	        # constraint coefficients
+b <- c(1660, 500, 50, 0)		              # constraint rhs		
+dir  <- c("<=", "<=", ">=", ">=")		      # direction of inequality
+# we make sure the number of paintings are integers!
+optimum <-  lp(direction="max",  objective, A, dir,  b, all.int = TRUE)
+cat("The maximum profit is", optimum$objval, "\n")
+cat("The optimal number of paintings are (S,P) = (",optimum$solution,")")
+```
+
+In the third scenario, the artist should make only 83 paintings with material of superior quality. He will be able then to generate even more money, i.e., 19920 CHF, for which he need one hour less work $83 \times 6 = 498 \ hours$.
+
+# Conclusion
+
+The project's purpose is to predict various house factors in Ames, Iowa, United States, by applying six different machine learning techniques and evaluating these models. Our dataset presents 2930 observations with 82 features describing diverse aspects of a house. We proactively conducted the variable comprehension, exploratory data analysis, visualized numerous plots, and built several models in each type of machine learning technique to accomplish the task. Afterward, evaluating all the models, analyzing the residuals, assessing model accuracy with in and out-sample performance, or testing cross-validation are essential steps to select our final models under machine learning methods.  
+
+"No pain, no gain" - many challenges appeared during the process. First, testing numerous models took time and computing power. While some are relatively fast, others require much more time to predict. Secondly, another confrontation was finding a suitable countable value for the GLM with the Poisson family. The two potential options were the number of cars and rooms. While the number of cars only goes up to five, the best alternative was the number of rooms. Thirdly, the dataset was already quite complex with many variables; the initial analysis and determination of relevant features were excessively time-consuming. With multiple analyses from different perspectives, we could still focus on the variables having an effect on the response variable to improve the models.
+The table below summarizes our results. Each model has its advantages and disadvantages. In general, our models have an R-squared or accuracy of at least 0.9. Regarding the first three models to predict the house price, the three R-squared are up to 0.92. Besides, all of the RMSE below the actual price's standard deviation, which is a good sign. NN is the winner to predict the house price, followed by SVM and LM. Nevertheless, the gap among these three models' R-squared and RMSE is relatively minor. 
+
+![](summary_results.png)
+
+With respect to classification with building types, the three last models generate an accuracy of around 0.95. Note that the accuracy in the table above presents the accuracy in the confusion matrix. One highlight is that we applied both Support Vector Machine and Neural Network in the classification problem with the same predictors. The goal was to identify a better model. The accuracy of both models is about 0.95. However, the Family complex is overrepresented than the other building types. In the case of unbalanced data, Kappa might be a better indicator. However, both models performed with a Kappa about 0.80 similar. Although both models show similar results, the Support Vector Machine with the radial kernel would be considered more favorable because of much faster computing.
+
+
+# Reflections and limitations
+
+Noticeably, the result might change by optimizing different hyperparameters with different expert knowledge levels. Each machine learning method also serves various purposes. Therefore, applying models with a thoughtful, analytical, critical mindset is crucial. Understanding the fundamentals of the machine methods when fitting model is essential. The class materials are the most trustworthy and helpful source. Grounded by these materials and further research, we conducted every model with contemplation to ensure the proper approach. Also, measuring the accuracy in a comparable unit is very noteworthy.
+
+The study also comes with some limitations. First, due to specific requirements, only limited numbers of machine learning techniques could be applied. Secondly, the page restriction only allows us to display only part of our in-depth analysis. For some of the applied methods, the data was suitable to a lesser degree than for others. Varied directions for upcoming research could be developed. For example, future studies could gather different housing datasets to expand and cross-check each machine learning model. Besides, many other exciting machine learning models such as random forest could be performed. Furthermore, a more comprehensive analysis could be done given a longer working period. With further knowledge in machine learning and a deeper understanding of the relevant domain, we would be able even to perform better predictions. Nevertheless, we have already built our first fundamental knowledge with this work, which will help us in the future.
+
+
+
 
